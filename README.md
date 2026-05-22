@@ -3,7 +3,6 @@
 Ứng dụng phụ đề thời gian thực: nhận giọng nói (ASR) và dịch sang ngôn ngữ đích, hiển thị trên overlay trong suốt cho macOS và Windows.
 
 **GitHub:** https://github.com/xdnguyenhiepxd/live-speech-captions  
-**Tác giả:** [Nguyễn Văn Hiệp (@xdnguyenhiepxd)](https://github.com/xdnguyenhiepxd)
 
 ## Tính năng
 
