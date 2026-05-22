@@ -224,8 +224,3 @@ Chi tiết: `config/README.md`. FunASR: `FUNASR_GUIDE.md`.
 
 **Bảo mật:** Không commit `config.ini`. Chỉ dùng placeholder trong `config/**/*.ini.example`.
 
----
-
-## License
-
-MIT — Copyright 2025 Nguyễn Văn Hiệp
