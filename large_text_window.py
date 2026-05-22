@@ -66,29 +66,39 @@ class LargeTextOverlayWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
         self.setLayout(layout)
 
         panel = QFrame()
-        panel.setStyleSheet("background-color: rgba(0, 0, 0, 200); border-radius: 12px;")
+        panel.setStyleSheet("background-color: rgba(0, 0, 0, 200); border-radius: 10px;")
         panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(16, 16, 16, 12)
+        panel_layout.setContentsMargins(8, 8, 8, 6)
+        panel_layout.setSpacing(6)
 
         title = QLabel("🎤 Đang nghe (tiếng Anh)")
-        title.setStyleSheet("color: #89b4fa; font-size: 14px; font-weight: bold;")
+        title.setStyleSheet("color: #89b4fa; font-size: 13px; font-weight: bold; margin: 0;")
         panel_layout.addWidget(title)
+
+        hist_title = QLabel("Lịch sử")
+        hist_title.setStyleSheet("color: #6c7086; font-size: 11px; margin: 0;")
+        panel_layout.addWidget(hist_title)
 
         self.history = QTextEdit()
         self.history.setReadOnly(True)
         hist_font = QFont()
-        hist_font.setPointSize(max(14, self.font_size - 12))
+        hist_font.setPointSize(max(13, self.font_size - 14))
         self.history.setFont(hist_font)
         self.history.setStyleSheet(
             "QTextEdit { color: #a6adc8; background: rgba(30,30,46,160); "
-            "border: none; border-radius: 8px; padding: 8px; }"
+            "border: none; border-radius: 6px; padding: 4px 6px; }"
         )
-        self.history.setMaximumHeight(160)
-        panel_layout.addWidget(self.history)
+        self.history.setMinimumHeight(200)
+        panel_layout.addWidget(self.history, stretch=3)
+
+        live_title = QLabel("Đang nói")
+        live_title.setStyleSheet("color: #6c7086; font-size: 11px; margin: 0;")
+        panel_layout.addWidget(live_title)
 
         self.live_label = QLabel("…")
         self.live_label.setWordWrap(True)
@@ -101,12 +111,12 @@ class LargeTextOverlayWindow(QWidget):
         self.live_label.setFont(live_font)
         self.live_label.setStyleSheet(
             "color: #ffffff; background: rgba(49,50,68,200); "
-            "border-radius: 8px; padding: 14px; min-height: 80px;"
+            "border-radius: 6px; padding: 6px 8px; margin: 0;"
         )
-        self.live_label.setMinimumHeight(120)
-        panel_layout.addWidget(self.live_label, stretch=1)
+        self.live_label.setMinimumHeight(48)
+        panel_layout.addWidget(self.live_label, stretch=2)
 
-        layout.addWidget(panel)
+        layout.addWidget(panel, stretch=1)
 
         bar = QHBoxLayout()
         self.save_btn = QPushButton("💾 Lưu")
@@ -149,7 +159,8 @@ class LargeTextOverlayWindow(QWidget):
         self._committed_ids.add(chunk_id)
         ts = time.strftime("%H:%M:%S")
         self.history.append(
-            f"<p style='margin:4px 0'><span style='color:#6c7086'>[{ts}]</span> {text}</p>"
+            f"<p style='margin:2px 0;line-height:1.3'>"
+            f"<span style='color:#6c7086'>[{ts}]</span> {text}</p>"
         )
         self._trim_body()
         sb = self.history.verticalScrollBar()
