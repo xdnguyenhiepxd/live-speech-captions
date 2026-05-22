@@ -1,0 +1,927 @@
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QPushButton, QFrame, QComboBox, QLineEdit, 
+                             QTabWidget, QSpinBox, QDoubleSpinBox, QGridLayout,
+                             QScrollArea, QSizePolicy, QSpacerItem, QFormLayout, QApplication,
+                             QMessageBox, QTextEdit, QDialog)
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread
+from PyQt6.QtGui import QFont, QIcon, QColor
+import sys
+import sounddevice as sd
+from config import config
+
+# Modern QSS Styles
+STYLESHEET = """
+QMainWindow, QWidget {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    font-family: 'Helvetica Neue', 'PingFang SC', 'Arial', sans-serif;
+}
+QTabWidget::pane {
+    border: 1px solid #313244;
+    background: #1e1e2e;
+    border-radius: 8px;
+}
+QTabBar::tab {
+    background: #313244;
+    color: #a6adc8;
+    padding: 10px 20px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    margin-right: 2px;
+}
+QTabBar::tab:selected {
+    background: #89b4fa;
+    color: #1e1e2e;
+    font-weight: bold;
+}
+QLabel {
+    font-size: 14px;
+}
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+    background-color: #313244;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+    padding: 5px;
+    color: #cdd6f4;
+    selection-background-color: #585b70;
+}
+QPushButton {
+    background-color: #89b4fa;
+    color: #1e1e2e;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #b4befe;
+}
+QPushButton#StopButton {
+    background-color: #f38ba8;
+}
+QPushButton#StopButton:hover {
+    background-color: #eba0ac;
+}
+QGroupBox {
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px;
+    color: #fab387;
+}
+"""
+
+class Dashboard(QWidget):
+    start_requested = pyqtSignal()
+    stop_requested = pyqtSignal()
+
+    def closeEvent(self, event):
+        """Ensure total program quit when dashboard is closed"""
+        self.status_label.setText("Đang dừng...")
+        self.on_stop()
+        # Force application exit
+        QApplication.quit()
+        event.accept()
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Phụ đề thời gian thực — Bảng điều khiển")
+        self.setMinimumSize(600, 500)
+        self.setStyleSheet(STYLESHEET)
+        
+        # Main Layout
+        self.layout = QVBoxLayout()
+        self.layout.setSpacing(20)
+        self.layout.setContentsMargins(20, 20, 20, 20)
+        self.setLayout(self.layout)
+        
+        # Header
+        header = QLabel("🎙️ Phụ đề thời gian thực")
+        header.setStyleSheet("font-size: 24px; font-weight: bold; color: #89b4fa;")
+        self.layout.addWidget(header)
+        
+        # Tabs
+        self.tabs = QTabWidget()
+        self.layout.addWidget(self.tabs)
+        
+        self.init_home_tab()
+        self.init_audio_tab()
+        self.init_device_manager_tab()
+        self.init_transcription_tab()
+        self.init_translation_tab()
+        
+        # Footer Actions
+        footer = QHBoxLayout()
+        self.save_btn = QPushButton("Lưu cấu hình")
+        self.save_btn.clicked.connect(self.save_config)
+        self.save_btn.setStyleSheet("""
+            background-color: #a6e3a1; color: #1e1e2e;
+        """)
+        footer.addStretch()
+        footer.addWidget(self.save_btn)
+        self.layout.addLayout(footer)
+
+    def init_home_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(20)
+        
+        self.status_label = QLabel("Sẵn sàng")
+        self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
+        layout.addWidget(self.status_label)
+        
+        btn_layout = QHBoxLayout()
+        
+        self.start_btn = QPushButton("▶ Phụ đề + dịch")
+        self.start_btn.setFixedSize(220, 56)
+        self.start_btn.setStyleSheet("font-size: 15px; background-color: #89b4fa; border-radius: 10px;")
+        self.start_btn.clicked.connect(lambda: self.on_start(translate=True))
+
+        self.reader_btn = QPushButton("🔤 Chữ to — chỉ nhận giọng")
+        self.reader_btn.setFixedSize(220, 56)
+        self.reader_btn.setStyleSheet("font-size: 15px; background-color: #a6e3a1; color: #1e1e2e; border-radius: 10px;")
+        self.reader_btn.clicked.connect(lambda: self.on_start(translate=False))
+        
+        self.stop_btn = QPushButton("⏹ Dừng")
+        self.stop_btn.setFixedSize(220, 56)
+        self.stop_btn.setStyleSheet("font-size: 16px; background-color: #f38ba8; border-radius: 10px;")
+        self.stop_btn.clicked.connect(self.on_stop)
+        self.stop_btn.hide()
+        
+        layout.addLayout(btn_layout)
+        layout.addWidget(self.start_btn)
+        layout.addWidget(self.reader_btn)
+        layout.addWidget(self.stop_btn)
+        
+        info = QLabel(
+            "• <b>Phụ đề + dịch</b>: nhận giọng + dịch API (cần key)\n"
+            "• <b>Chữ to</b>: chỉ chuyển giọng → chữ lớn, không cần API"
+        )
+        info.setTextFormat(Qt.TextFormat.RichText)
+        info.setStyleSheet("color: #6c7086; font-style: italic;")
+        layout.addWidget(info)
+        
+        tab.setLayout(layout)
+        self.tabs.addTab(tab, "🏠 Trang chủ")
+
+    def init_audio_tab(self):
+        tab = QWidget()
+        layout = QGridLayout() # Use Grid for organized form
+        layout.setSpacing(15)
+        
+        # Device Selection
+        bh_hint = QLabel(
+            "⚠️ Bắt tiếng YouTube/Zoom: đặt <b>Đầu ra macOS</b> = «Thiết bị Nhiều Đầu ra» "
+            "(không chỉ Loa MacBook). Thiết bị vào ở đây = <b>BlackHole 2ch</b>."
+        )
+        bh_hint.setWordWrap(True)
+        bh_hint.setStyleSheet("color: #fab387; font-size: 12px; padding: 4px 0;")
+        layout.addWidget(bh_hint, 0, 0, 1, 3)
+
+        layout.addWidget(QLabel("Thiết bị vào:"), 1, 0)
+        self.device_combo = QComboBox()
+        self.populate_devices()
+        layout.addWidget(self.device_combo, 1, 1)
+        
+        # Refresh Button
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setFixedWidth(40)
+        refresh_btn.clicked.connect(self.populate_devices)
+        layout.addWidget(refresh_btn, 1, 2)
+        
+        # Sample Rate
+        layout.addWidget(QLabel("Tần số lấy mẫu:"), 2, 0)
+        self.sample_rate = QSpinBox()
+        self.sample_rate.setRange(8000, 48000)
+        self.sample_rate.setValue(config.sample_rate)
+        layout.addWidget(self.sample_rate, 2, 1)
+
+        # Silence Threshold
+        layout.addWidget(QLabel("Ngưỡng im lặng:"), 3, 0)
+        self.silence_thresh = QDoubleSpinBox()
+        self.silence_thresh.setRange(0.001, 1.0)
+        self.silence_thresh.setSingleStep(0.001)
+        self.silence_thresh.setDecimals(3)
+        self.silence_thresh.setValue(config.silence_threshold)
+        layout.addWidget(self.silence_thresh, 3, 1)
+        
+        layout.addWidget(QLabel("Thời gian im lặng (giây):"), 4, 0)
+        self.silence_dur = QDoubleSpinBox()
+        self.silence_dur.setValue(config.silence_duration)
+        layout.addWidget(self.silence_dur, 4, 1)
+        
+        layout.setRowStretch(5, 1) # Push to top
+        
+        tab.setLayout(layout)
+        self.tabs.addTab(tab, "🎤 Âm thanh")
+
+    def init_device_manager_tab(self):
+        """Audio Device Manager - Create/Manage Multi-Output Devices"""
+        tab = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        
+        # Header
+        header = QLabel("Quản lý thiết bị âm thanh")
+        header.setStyleSheet("font-size: 16px; font-weight: bold; color: #fab387;")
+        layout.addWidget(header)
+        
+        info = QLabel("Tạo thiết bị Multi-Output để vừa bắt âm hệ thống vừa nghe qua loa")
+        info.setStyleSheet("color: #6c7086; font-size: 12px; font-style: italic;")
+        layout.addWidget(info)
+        
+        # Available Devices List
+        devices_label = QLabel("Thiết bị ra (loa):")
+        layout.addWidget(devices_label)
+        
+        self.output_devices_list = QComboBox()
+        self.output_devices_list.setMinimumHeight(30)
+        layout.addWidget(self.output_devices_list)
+        
+        # Virtual Device List
+        virtual_label = QLabel("Thiết bị ảo / BlackHole:")
+        layout.addWidget(virtual_label)
+        
+        self.virtual_devices_list = QComboBox()
+        self.virtual_devices_list.setMinimumHeight(30)
+        layout.addWidget(self.virtual_devices_list)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        self.refresh_devices_btn = QPushButton("🔄 Làm mới danh sách")
+        self.refresh_devices_btn.clicked.connect(self.refresh_audio_devices)
+        btn_layout.addWidget(self.refresh_devices_btn)
+        
+        self.create_multi_output_btn = QPushButton("➕ Tạo Multi-Output")
+        self.create_multi_output_btn.setStyleSheet("""
+            background-color: #a6e3a1; color: #1e1e2e; font-weight: bold;
+        """)
+        self.create_multi_output_btn.clicked.connect(self.create_multi_output_device)
+        btn_layout.addWidget(self.create_multi_output_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        # Set as Default Button
+        self.set_default_btn = QPushButton("🔊 Đặt làm thiết bị ra mặc định")
+        self.set_default_btn.clicked.connect(self.set_default_output_device)
+        layout.addWidget(self.set_default_btn)
+        
+        # Status
+        self.device_status = QLabel("Sẵn sàng")
+        self.device_status.setStyleSheet("color: #a6e3a1; font-style: italic; padding: 10px;")
+        layout.addWidget(self.device_status)
+        
+        # Help text
+        help_text = QLabel(
+            "<b>Cách dùng:</b><br>"
+            "1. Chọn loa trong danh sách thiết bị ra<br>"
+            "2. Chọn BlackHole trong thiết bị ảo<br>"
+            "3. Bấm «Tạo Multi-Output»<br>"
+            "   • Audio MIDI Setup sẽ mở kèm hướng dẫn<br>"
+            "4. Thiết bị mới giúp vừa nghe vừa bắt âm hệ thống!<br>"
+            "<br><i>Lưu ý: Có thể cần quyền Trợ năng (Accessibility) để tự động hóa.</i>"
+        )
+        help_text.setWordWrap(True)
+        help_text.setStyleSheet("background-color: #313244; padding: 10px; border-radius: 5px; font-size: 12px;")
+        layout.addWidget(help_text)
+        
+        layout.addStretch()
+        
+        tab.setLayout(layout)
+        self.tabs.addTab(tab, "🔧 Thiết bị")
+        
+        # Initial population
+        self.refresh_audio_devices()
+
+    def refresh_audio_devices(self):
+        """Refresh the list of audio devices"""
+        try:
+            import platform
+            if platform.system() != "Darwin":
+                self.device_status.setText("⚠️ Quản lý thiết bị chỉ hỗ trợ macOS")
+                self.device_status.setStyleSheet("color: #fab387;")
+                return
+            
+            from audio_device_manager import AudioDeviceManager
+            manager = AudioDeviceManager()
+            
+            # Get output devices
+            output_devices = manager.get_output_devices()
+            self.output_devices_list.clear()
+            for device in output_devices:
+                self.output_devices_list.addItem(f"{device['name']}", device['id'])
+            
+            # Get virtual/BlackHole devices
+            virtual_devices = manager.get_virtual_devices()
+            self.virtual_devices_list.clear()
+            if not virtual_devices:
+                self.virtual_devices_list.addItem("Chưa tìm thấy BlackHole — hãy cài đặt")
+                self.device_status.setText("⚠️ Chưa có BlackHole. Cài: brew install blackhole-2ch")
+                self.device_status.setStyleSheet("color: #fab387;")
+            else:
+                for device in virtual_devices:
+                    self.virtual_devices_list.addItem(f"{device['name']}", device['id'])
+                self.device_status.setText("✅ Đã tải danh sách thiết bị")
+                self.device_status.setStyleSheet("color: #a6e3a1;")
+                
+        except ImportError:
+            self.device_status.setText("⚠️ Cần PyObjC: pip install pyobjc-framework-CoreAudio")
+            self.device_status.setStyleSheet("color: #f38ba8;")
+        except Exception as e:
+            self.device_status.setText(f"❌ Lỗi: {str(e)}")
+            self.device_status.setStyleSheet("color: #f38ba8;")
+    
+    def create_multi_output_device(self):
+        """Create a multi-output device combining speakers + BlackHole"""
+        try:
+            from audio_device_manager import AudioDeviceManager
+            manager = AudioDeviceManager()
+            
+            output_device_id = self.output_devices_list.currentData()
+            virtual_device_id = self.virtual_devices_list.currentData()
+            
+            if not output_device_id or not virtual_device_id:
+                self.device_status.setText("⚠️ Hãy chọn cả hai thiết bị")
+                self.device_status.setStyleSheet("color: #fab387;")
+                return
+            
+            # Show instruction dialog
+            self._show_multi_output_instructions()
+            
+            # Call the audio device manager to open Audio MIDI Setup
+            device_name = f"Phụ đề Multi-Output"
+            success = manager.create_multi_output_device(
+                device_name,
+                [output_device_id, virtual_device_id],
+                silent=True  # Suppress console output, show GUI dialog instead
+            )
+            
+            if success:
+                self.device_status.setText(f"✅ Đã mở Audio MIDI Setup — làm theo hướng dẫn!")
+                self.device_status.setStyleSheet("color: #a6e3a1;")
+                # Refresh after user has time to create the device
+                QTimer = __import__('PyQt6.QtCore', fromlist=['QTimer']).QTimer
+                QTimer.singleShot(3000, self.refresh_audio_devices)
+            else:
+                self.device_status.setText("❌ Không mở được Audio MIDI Setup")
+                self.device_status.setStyleSheet("color: #f38ba8;")
+                
+        except Exception as e:
+            self.device_status.setText(f"❌ Lỗi: {str(e)}")
+            self.device_status.setStyleSheet("color: #f38ba8;")
+    
+    def _show_multi_output_instructions(self):
+        """Show a dialog with step-by-step instructions"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("🎵 Tạo Multi-Output — Hướng dẫn")
+        dialog.setMinimumSize(600, 500)
+        dialog.setStyleSheet(STYLESHEET)
+        
+        layout = QVBoxLayout()
+        
+        # Title
+        title = QLabel("📋 Hướng dẫn từng bước")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #89b4fa; padding: 10px;")
+        layout.addWidget(title)
+        
+        # Instructions text
+        instructions = QTextEdit()
+        instructions.setReadOnly(True)
+        instructions.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 13px;
+                line-height: 1.6;
+            }
+        """)
+        
+        output_device = self.output_devices_list.currentText()
+        virtual_device = self.virtual_devices_list.currentText()
+        
+        instructions_html = f"""
+        <div style='font-family: Arial, sans-serif;'>
+        <h3 style='color: #fab387;'>✨ Đang mở Audio MIDI Setup...</h3>
+        
+        <p style='color: #a6adc8;'><b>Làm theo các bước sau:</b></p>
+        
+        <div style='background: #313244; padding: 12px; border-radius: 6px; margin: 10px 0;'>
+        <p style='color: #89b4fa; font-weight: bold;'>👉 Bước 1: Nút dấu cộng</p>
+        <p>Trong cửa sổ Audio MIDI Setup, góc <b>dưới bên trái</b>,<br>
+        bấm nút <span style='background: #45475a; padding: 2px 8px; border-radius: 3px;'>[+]</span>.</p>
+        </div>
+        
+        <div style='background: #313244; padding: 12px; border-radius: 6px; margin: 10px 0;'>
+        <p style='color: #89b4fa; font-weight: bold;'>👉 Bước 2: Tạo Multi-Output</p>
+        <p>Chọn mục:<br>
+        <span style='color: #a6e3a1; font-weight: bold;'>Create Multi-Output Device</span></p>
+        </div>
+        
+        <div style='background: #313244; padding: 12px; border-radius: 6px; margin: 10px 0;'>
+        <p style='color: #89b4fa; font-weight: bold;'>👉 Bước 3: Chọn thiết bị</p>
+        <p>Tick các thiết bị:<br>
+        ✅ <span style='color: #f9e2af;'>{output_device}</span> (loa của bạn)<br>
+        ✅ <span style='color: #f9e2af;'>{virtual_device}</span> (để bắt âm)</p>
+        </div>
+        
+        <div style='background: #313244; padding: 12px; border-radius: 6px; margin: 10px 0;'>
+        <p style='color: #89b4fa; font-weight: bold;'>👉 Bước 4: Drift Correction</p>
+        <p><b style='color: #f38ba8;'>QUAN TRỌNG:</b> Bỏ tick <b>Drift Correction</b> cho <span style='color: #f9e2af;'>{output_device}</span><br>
+        (để vẫn nghe được qua loa)</p>
+        </div>
+        
+        <div style='background: #313244; padding: 12px; border-radius: 6px; margin: 10px 0;'>
+        <p style='color: #89b4fa; font-weight: bold;'>👉 Bước 5: Đặt làm đầu ra mặc định</p>
+        <p>Vào <b>Cài đặt hệ thống → Âm thanh</b><br>
+        Chọn <span style='color: #a6e3a1;'>Multi-Output Device</span> vừa tạo làm thiết bị ra.</p>
+        </div>
+        
+        <hr style='border: 1px solid #45475a; margin: 15px 0;'>
+        
+        <p style='color: #6c7086; font-style: italic;'>
+        💡 Chỉ cần làm một lần; thiết bị giữ sau khi khởi động lại.<br>
+        Sau khi cấu hình, bạn vừa nghe bình thường vừa bắt âm cho phụ đề.
+        </p>
+        </div>
+        """
+        
+        instructions.setHtml(instructions_html)
+        layout.addWidget(instructions)
+        
+        # Close button
+        close_btn = QPushButton("✅ Đã hiểu!")
+        close_btn.setFixedHeight(40)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1;
+                color: #1e1e2e;
+                font-weight: bold;
+                font-size: 14px;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #b4e4b4;
+            }
+        """)
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+        
+        dialog.setLayout(layout)
+        dialog.exec()
+    
+    def set_default_output_device(self):
+        """Set the selected device as system default output"""
+        try:
+            from audio_device_manager import AudioDeviceManager
+            manager = AudioDeviceManager()
+            
+            device_id = self.output_devices_list.currentData()
+            if not device_id:
+                self.device_status.setText("⚠️ Hãy chọn một thiết bị")
+                self.device_status.setStyleSheet("color: #fab387;")
+                return
+            
+            device_name = self.output_devices_list.currentText()
+            success = manager.set_default_output_device(device_id)
+            
+            if success:
+                self.device_status.setText(f"✅ Đã đặt '{device_name}' làm đầu ra mặc định")
+                self.device_status.setStyleSheet("color: #a6e3a1;")
+            else:
+                self.device_status.setText("❌ Không đặt được thiết bị mặc định")
+                self.device_status.setStyleSheet("color: #f38ba8;")
+                
+        except Exception as e:
+            self.device_status.setText(f"❌ Lỗi: {str(e)}")
+            self.device_status.setStyleSheet("color: #f38ba8;")
+
+    def refresh_model_list(self):
+        """Fetch available models from the API and populate the model dropdown"""
+        try:
+            from openai import OpenAI
+            import httpx
+            
+            api_key = self.api_key.text() or "dummy-key-for-local"
+            base_url = self.base_url.text() or None
+            
+            # Update button state
+            self.refresh_models_btn.setEnabled(False)
+            self.refresh_models_btn.setText("...")
+            
+            # Create client with SSL verification disabled
+            http_client = httpx.Client(verify=False)
+            client = OpenAI(api_key=api_key, base_url=base_url, http_client=http_client)
+            
+            # Fetch models
+            models_response = client.models.list()
+            model_ids = [model.id for model in models_response.data]
+            
+            # Update combo box
+            current_model = self.model.currentText()
+            self.model.clear()
+            
+            if model_ids:
+                self.model.addItems(sorted(model_ids))
+                # Try to restore previous selection
+                index = self.model.findText(current_model)
+                if index >= 0:
+                    self.model.setCurrentIndex(index)
+                    
+                # Show success in status label if we're on the home tab
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText(f"✅ Đã tải {len(model_ids)} model")
+                    self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
+            else:
+                self.model.addItem(current_model)
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText("⚠️ Không tìm thấy model")
+                    self.status_label.setStyleSheet("font-size: 18px; color: #fab387;")
+            
+        except Exception as e:
+            # Restore original model on error
+            if not self.model.currentText():
+                self.model.addItem(config.model)
+            
+            error_msg = str(e)
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(f"❌ Lỗi tải model: {error_msg[:50]}")
+                self.status_label.setStyleSheet("font-size: 18px; color: #f38ba8;")
+            print(f"[Dashboard] Model refresh error: {error_msg}")
+        
+        finally:
+            # Restore button state
+            self.refresh_models_btn.setEnabled(True)
+            self.refresh_models_btn.setText("🔄")
+
+    def init_transcription_tab(self):
+        tab = QWidget()
+        layout = QFormLayout()
+        
+        # ASR Backend Selection
+        self.asr_backend = QComboBox()
+        self.asr_backend.addItems(["whisper", "mlx", "funasr"])
+        self.asr_backend.setCurrentText(config.asr_backend)
+        self.asr_backend.setToolTip(
+            "whisper: CPU/CUDA (faster-whisper)\n"
+            "mlx: GPU Apple Silicon (mlx-whisper)\n"
+            "funasr: ASR Alibaba (tốt cho tiếng Trung)"
+        )
+        self.asr_backend.currentTextChanged.connect(self._on_backend_changed)
+        layout.addRow("Engine ASR:", self.asr_backend)
+        
+        # Whisper Model
+        self.whisper_model = QComboBox()
+        self.whisper_model.addItems(["tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large-v3", "turbo"])
+        self.whisper_model.setCurrentText(config.whisper_model)
+        layout.addRow("Model Whisper:", self.whisper_model)
+        
+        # FunASR Model
+        self.funasr_model = QComboBox()
+        self.funasr_model.setEditable(True)
+        self.funasr_model.addItems([
+            "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+            "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+            "iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404-online",
+            "iic/speech_UniASR_asr_2pass-vi-16k-common-vocab1001-pytorch-online",
+            "iic/speech_UniASR_asr_2pass-en-16k-common-vocab1080-tensorflow1-online",
+            "iic/SenseVoiceSmall",
+            "FunAudioLLM/SenseVoiceSmall",
+            "FunAudioLLM/Fun-ASR-Nano-2512",
+            "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+        ])
+        self.funasr_model.setCurrentText(config.funasr_model)
+        self.funasr_model.setToolTip(
+            "Chinese (Offline): iic/speech_paraformer-large...\n"
+            "Chinese (Streaming): iic/speech_paraformer_asr_nat...online\n"
+            "English (Streaming): iic/speech_UniASR_asr_2pass-en...\n"
+            "Multi-language: iic/SenseVoiceSmall\n"
+            "Latest 31-lang model: FunAudioLLM/Fun-ASR-Nano-2512"
+        )
+        layout.addRow("Model FunASR:", self.funasr_model)
+        
+        self.device_type = QComboBox()
+        self.device_type.addItems(["cpu", "cuda", "mps", "auto"])
+        self.device_type.setCurrentText(config.whisper_device)
+        self.device_type.currentTextChanged.connect(self._on_device_changed)
+        layout.addRow("Thiết bị tính toán:", self.device_type)
+        
+        self.compute_type = QComboBox()
+        self.compute_type.addItems(["int8", "float16", "float32"])
+        self.compute_type.setCurrentText(config.whisper_compute_type)
+        self.compute_type.currentTextChanged.connect(self._on_quantization_changed)
+        layout.addRow("Lượng tử hóa:", self.compute_type)
+        
+        # Source Language Configuration
+        self.source_language = QComboBox()
+        self.source_language.setEditable(True)
+        self.source_language.addItems(["auto", "en", "zh", "vi", "ja", "ko", "es", "fr", "de", "ru", "ar", "pt", "it"])
+        source_lang = config.source_language if config.source_language else "en"
+        self.source_language.setCurrentText(source_lang if source_lang else "en")
+        layout.addRow("Ngôn ngữ nguồn:", self.source_language)
+        
+        # Update UI based on initial backend
+        self._on_backend_changed(config.asr_backend)
+        
+        tab.setLayout(layout)
+        self.tabs.addTab(tab, "📝 Nhận giọng")
+    
+    def _on_backend_changed(self, backend):
+        """Show/hide model selectors based on backend and warn about device compatibility"""
+        is_whisper_or_mlx = backend in ["whisper", "mlx"]
+        is_funasr = backend == "funasr"
+        
+        # Enable/disable appropriate widgets
+        self.whisper_model.setEnabled(is_whisper_or_mlx)
+        self.funasr_model.setEnabled(is_funasr)
+        
+        # Visual feedback - dim disabled widgets
+        if is_whisper_or_mlx:
+            self.whisper_model.setStyleSheet("")
+            self.funasr_model.setStyleSheet("color: #6c7086;")
+        else:
+            self.whisper_model.setStyleSheet("color: #6c7086;")
+            self.funasr_model.setStyleSheet("")
+        
+        # Check MPS + FunASR quantization compatibility
+        if is_funasr:
+            self._check_funasr_mps_compatibility()
+    
+    def _check_funasr_mps_compatibility(self):
+        """Check if MPS device is used with FunASR and enforce float32"""
+        current_device = self.device_type.currentText()
+        current_quantization = self.compute_type.currentText()
+        
+        if current_device == "mps" and current_quantization != "float32":
+            self._show_mps_float32_warning()
+            # Auto-switch to float32
+            float32_index = self.compute_type.findText("float32")
+            if float32_index >= 0:
+                self.compute_type.setCurrentIndex(float32_index)
+    
+    def _show_mps_float32_warning(self):
+        """Show warning about MPS requiring float32 with FunASR"""
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setWindowTitle("Tương thích lượng tử hóa")
+        msg.setText("FunASR trên MPS cần dùng float32")
+        msg.setInformativeText(
+            "MPS (Metal) của Apple không hỗ trợ float64.\n\n"
+            "Khi dùng FunASR với thiết bị MPS, lượng tử hóa phải là float32.\n\n"
+            "Đã tự động chuyển sang float32."
+        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
+    
+    def _on_device_changed(self, device):
+        """Check device compatibility when user changes device selection"""
+        # Check MPS + FunASR quantization compatibility
+        if self.asr_backend.currentText() == "funasr":
+            self._check_funasr_mps_compatibility()
+    
+    def _on_quantization_changed(self, quantization):
+        """Check quantization compatibility when user changes quantization"""
+        # Check MPS + FunASR quantization compatibility
+        if self.asr_backend.currentText() == "funasr":
+            self._check_funasr_mps_compatibility()
+
+    def init_translation_tab(self):
+        tab = QWidget()
+        layout = QFormLayout()
+        
+        self.api_key = QLineEdit(config.api_key)
+        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key.setPlaceholderText("sk-...")
+        layout.addRow("Khóa API:", self.api_key)
+        
+        self.base_url = QLineEdit(config.api_base_url or "")
+        self.base_url.setPlaceholderText("https://api.openai.com/v1")
+        layout.addRow("URL gốc:", self.base_url)
+        
+        # Model selection with refresh button
+        model_layout = QHBoxLayout()
+        self.model = QComboBox()
+        self.model.setEditable(True)
+        self.model.addItem(config.model)
+        model_layout.addWidget(self.model)
+        
+        self.refresh_models_btn = QPushButton("🔄")
+        self.refresh_models_btn.setFixedWidth(40)
+        self.refresh_models_btn.setToolTip("Tải lại danh sách model từ API")
+        self.refresh_models_btn.clicked.connect(self.refresh_model_list)
+        model_layout.addWidget(self.refresh_models_btn)
+        
+        layout.addRow("Model dịch:", model_layout)
+        
+        self.target_lang = QComboBox()
+        for label, value in [
+            ("Tiếng Việt", "Vietnamese"),
+            ("Tiếng Anh", "English"),
+            ("Tiếng Trung", "Chinese"),
+            ("Tiếng Nhật", "Japanese"),
+            ("Tiếng Pháp", "French"),
+            ("Tiếng Tây Ban Nha", "Spanish"),
+            ("Tiếng Đức", "German"),
+            ("Tiếng Hàn", "Korean"),
+        ]:
+            self.target_lang.addItem(label, value)
+        self.target_lang.setEditable(True)
+        idx = self.target_lang.findData(config.target_lang)
+        if idx >= 0:
+            self.target_lang.setCurrentIndex(idx)
+        else:
+            self.target_lang.addItem(config.target_lang, config.target_lang)
+            self.target_lang.setCurrentText(config.target_lang)
+        layout.addRow("Ngôn ngữ đích:", self.target_lang)
+        
+        tab.setLayout(layout)
+        self.tabs.addTab(tab, "🈵 Dịch")
+
+    def populate_devices(self):
+        self.device_combo.clear()
+        self.device_combo.addItem("Tự động (mặc định)", "auto")
+        
+        try:
+            devices = sd.query_devices()
+            for i, d in enumerate(devices):
+                if d['max_input_channels'] > 0:
+                    name = f"[{i}] {d['name']}"
+                    self.device_combo.addItem(name, i) # Store index as data
+            
+            # Select current
+            if config.device_index is not None:
+                index = self.device_combo.findData(config.device_index)
+                if index >= 0:
+                    self.device_combo.setCurrentIndex(index)
+        except Exception as e:
+            self.device_combo.addItem(f"Lỗi: {e}")
+
+    def save_config(self):
+        import configparser
+        import os
+        
+        # Update config object logic would go here, 
+        # For now, we write directly to config.ini similarly to settings_window.py
+        
+        cp = configparser.ConfigParser()
+        config_path = os.path.join(os.path.dirname(__file__), "config.ini")
+        cp.read(config_path)
+        
+        if not cp.has_section("audio"): cp.add_section("audio")
+        if not cp.has_section("api"): cp.add_section("api")
+        if not cp.has_section("translation"): cp.add_section("translation")
+        if not cp.has_section("transcription"): cp.add_section("transcription")
+        
+        # Audio
+        idx = self.device_combo.currentData()
+        cp.set("audio", "device_index", str(idx) if idx is not None else "auto")
+        cp.set("audio", "sample_rate", str(self.sample_rate.value()))
+        cp.set("audio", "silence_threshold", str(self.silence_thresh.value()))
+        cp.set("audio", "silence_duration", str(self.silence_dur.value()))
+        
+        # Transcription
+        cp.set("transcription", "backend", self.asr_backend.currentText())
+        cp.set("transcription", "whisper_model", self.whisper_model.currentText())
+        cp.set("transcription", "funasr_model", self.funasr_model.currentText())
+        cp.set("transcription", "device", self.device_type.currentText())
+        cp.set("transcription", "compute_type", self.compute_type.currentText())
+        cp.set("transcription", "source_language", self.source_language.currentText())
+        
+        # Translation
+        cp.set("api", "api_key", self.api_key.text())
+        cp.set("api", "base_url", self.base_url.text())
+        cp.set("translation", "model", self.model.currentText())
+        target = self.target_lang.currentData()
+        cp.set("translation", "target_lang", target if target else self.target_lang.currentText())
+        
+        with open(config_path, 'w') as f:
+            cp.write(f)
+            
+        self.status_label.setText("Đã lưu! Khởi động lại nếu cần.")
+
+    def on_start(self, translate=True):
+        self._session_translate = translate
+        label = "phụ đề + dịch" if translate else "chữ to (nhận giọng)"
+        self.status_label.setText(f"Đang khởi tạo {label}…")
+        self.status_label.setStyleSheet("font-size: 18px; color: #fab387;")
+        self.start_btn.setEnabled(False)
+        self.reader_btn.setEnabled(False)
+        self.start_btn.setText("Đang tải...")
+        self.reader_btn.setText("Đang tải...")
+
+        self.startup_worker = StartupWorker(enable_translation=translate)
+        self.startup_worker.finished.connect(self.on_pipeline_ready)
+        self.startup_worker.start()
+
+    def on_pipeline_ready(self, _, pipeline):
+        from config import config
+
+        if not pipeline:
+            self.status_label.setText("Khởi tạo thất bại — xem terminal")
+            self._reset_start_buttons()
+            return
+
+        self.pipeline = pipeline
+        translate = getattr(self, "_session_translate", True)
+
+        if translate:
+            from main import OverlayWindow
+            self.overlay_window = OverlayWindow(
+                display_duration=config.display_duration,
+                window_width=config.window_width,
+            )
+        else:
+            from large_text_window import LargeTextOverlayWindow
+            self.overlay_window = LargeTextOverlayWindow(
+                window_width=config.reader_window_width,
+                font_size=config.reader_font_size,
+                keep_lines=config.reader_keep_lines,
+            )
+
+        self.overlay_window.show()
+        self.pipeline.signals.update_text.connect(self.overlay_window.update_text)
+        if hasattr(self.overlay_window, "stop_requested"):
+            self.overlay_window.stop_requested.connect(self.on_stop)
+
+        self.pipeline.start()
+
+        mode = "Phụ đề + dịch" if translate else "Chữ to"
+        self.status_label.setText(f"Đang chạy: {mode}")
+        self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
+
+        self.start_btn.hide()
+        self.reader_btn.hide()
+        self.stop_btn.show()
+        self.showMinimized()
+
+    def _reset_start_buttons(self):
+        self.start_btn.setEnabled(True)
+        self.reader_btn.setEnabled(True)
+        self.start_btn.setText("▶ Phụ đề + dịch")
+        self.reader_btn.setText("🔤 Chữ to — chỉ nhận giọng")
+
+    def on_stop(self):
+        if hasattr(self, "pipeline") and self.pipeline:
+            self.pipeline.stop()
+            self.pipeline = None
+
+        if hasattr(self, "overlay_window") and self.overlay_window:
+            self.overlay_window.close()
+            self.overlay_window = None
+
+        self.status_label.setText("Đã dừng")
+        self.stop_btn.hide()
+        self._reset_start_buttons()
+        self.start_btn.show()
+        self.reader_btn.show()
+        self.showNormal()
+
+
+class StartupWorker(QThread):
+    finished = pyqtSignal(object, object)
+
+    def __init__(self, enable_translation=True):
+        super().__init__()
+        self.enable_translation = enable_translation
+
+    def run(self):
+        try:
+            from main import Pipeline
+            pipeline = Pipeline(enable_translation=self.enable_translation)
+            self.finished.emit(None, pipeline)
+        except Exception as e:
+            print(f"Startup Error: {e}")
+            import traceback
+            traceback.print_exc()
+            self.finished.emit(None, None)
+
+if __name__ == "__main__":
+    def exception_hook(exctype, value, traceback_obj):
+        import traceback
+        traceback_str = ''.join(traceback.format_tb(traceback_obj))
+        error_msg = f"Unhandled Exception: {value}\n\n{traceback_str}"
+        print(error_msg)
+        from PyQt6.QtWidgets import QMessageBox
+        if QApplication.instance():
+            QMessageBox.critical(None, "Lỗi nghiêm trọng", error_msg)
+        else:
+            # If no app, just print (already done)
+            pass
+        sys.exit(1)
+
+    sys.excepthook = exception_hook
+
+    app = QApplication(sys.argv)
+    w = Dashboard()
+    w.show()
+    sys.exit(app.exec())

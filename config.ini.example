@@ -1,0 +1,52 @@
+# Mẫu tổng quát — copy từ config/mac/ hoặc config/windows/ theo API bạn dùng.
+# Ví dụ: cp config/mac/deepseek.ini.example config.ini
+
+[api]
+base_url = https://api.openai.com/v1
+api_key = YOUR_API_KEY_HERE
+
+[translation]
+model = gpt-4o-mini
+# Ngôn ngữ phụ đề DỊCH RA: Vietnamese | English | Chinese | Japanese | …
+# Muốn phụ đề tiếng Anh: target_lang = English
+target_lang = Vietnamese
+threads = 4
+
+[display]
+display_duration = 10
+window_width = 800
+window_height = 120
+# Chế độ «Chữ to — chỉ nhận giọng»
+reader_font_size = 40
+reader_window_width = 920
+
+[transcription]
+backend = mlx
+whisper_model = tiny.en
+funasr_model = iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch
+device = auto
+compute_type = float16
+# Ngôn ngữ BẠN ĐANG NÓI: auto | en | vi | zh | ja | ko | …
+# Chỉ nói tiếng Anh: source_language = en
+source_language = auto
+transcription_workers = 4
+
+[audio]
+device_index = auto
+sample_rate = 16000
+silence_threshold = 0.005
+silence_duration = 0.5
+chunk_duration = 0.1
+max_phrase_duration = 6
+streaming_mode = true
+streaming_interval = 3
+streaming_step_size = 0.2
+update_interval = 1.2
+streaming_overlap = 0.2
+partial_updates = true
+reader_partial_updates = true
+reader_update_interval = 0.85
+partial_window_seconds = 2.5
+min_phrase_duration = 0.8
+standard_cut_duration = 1.0
+soft_cut_at_duration = 3.5
