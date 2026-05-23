@@ -2,9 +2,6 @@
 
 Ứng dụng phụ đề thời gian thực: nhận giọng nói (ASR) và dịch sang ngôn ngữ đích, hiển thị trên overlay trong suốt cho macOS và Windows.
 
-**GitHub:** https://github.com/xdnguyenhiepxd/live-speech-captions  
-**Tác giả:** [Nguyễn Văn Hiệp (@xdnguyenhiepxd)](https://github.com/xdnguyenhiepxd)
-
 ## Tính năng
 
 - **Nhận giọng thời gian thực**: `faster-whisper`, `mlx-whisper` (Apple Silicon), hoặc FunASR
@@ -113,19 +110,21 @@ cd ~/Projects
 
 #### B2. Clone mã nguồn
 
-**Cách 1 — HTTPS (dễ trên máy mới, không cần SSH):**
+**Cách 1 — Git (HTTPS):**
 
 ```bash
-git clone https://github.com/xdnguyenhiepxd/live-speech-captions.git
+git clone <URL-repository>/live-speech-captions.git
 cd live-speech-captions
 ```
 
-**Cách 2 — SSH** (nếu đã cấu hình khóa GitHub):
+**Cách 2 — SSH** (nếu repo dùng SSH):
 
 ```bash
-git clone git@github.com:xdnguyenhiepxd/live-speech-captions.git
+git clone git@github.com:<tai-khoan>/live-speech-captions.git
 cd live-speech-captions
 ```
+
+**Cách 3 — Không dùng Git:** tải ZIP từ trang repository, giải nén, mở Terminal trong thư mục `live-speech-captions`.
 
 #### B3. Cài thư viện Python (môi trường ảo)
 
@@ -145,53 +144,28 @@ Script sẽ:
 
 #### B4. Tạo file cấu hình `config.ini`
 
-**Chỉ nhận giọng tiếng Anh (Chữ to) — không cần API:**
-
-Sao chép mẫu tối giản rồi chỉnh (hoặc tạo tay theo block dưới):
+**Khuyến nghị cho MacBook Air (Apple Silicon):** dùng mẫu sẵn trong project:
 
 ```bash
-cp config.ini.example config.ini
+cp config/mac/macbook-air.ini.example config.ini
 ```
 
-Mở `config.ini` bằng TextEdit hoặc Cursor/VS Code. Ví dụ cấu hình gợi ý cho MacBook Air + tiếng Anh + Chữ to:
+Mẫu này đã cấu hình sẵn:
 
-```ini
-[api]
-base_url = https://api.deepseek.com
-api_key = dummy-key-not-used-for-reader-mode
+- `backend = mlx` — GPU Mac  
+- `whisper_model = small.en` + `source_language = en` — tiếng Anh  
+- `reader_partial_updates` — chữ chạy theo khi nói  
+- `device_index = auto` — tự tìm BlackHole (nếu đã cài)  
+- Tham số realtime (`max_phrase_duration`, `reader_update_interval`, …)
 
-[translation]
-model = deepseek-chat
-target_lang = Vietnamese
-threads = 2
+Mở `config.ini` và sửa nếu cần:
 
-[display]
-reader_font_size = 32
-reader_window_width = 920
-reader_keep_lines = 50
+- **Chỉ Chữ to:** có thể giữ `api_key = YOUR_API_KEY_HERE_OR_DUMMY_FOR_READER_ONLY` — không dùng khi bấm **Chữ to**.  
+- **Phụ đề + dịch:** sửa `api_key` thật, hoặc copy thêm mẫu API:  
+  `cp config/mac/deepseek.ini.example config.ini` (ghi đè) rồi chỉnh key.  
+- Model nhanh hơn: đổi `whisper_model = tiny.en` trong file.
 
-[transcription]
-backend = mlx
-whisper_model = small.en
-source_language = en
-device = auto
-compute_type = float16
-
-[audio]
-device_index = auto
-sample_rate = 16000
-silence_threshold = 0.005
-silence_duration = 0.45
-max_phrase_duration = 6
-streaming_mode = true
-streaming_step_size = 0.2
-reader_partial_updates = true
-reader_update_interval = 0.85
-partial_window_seconds = 2.5
-```
-
-> **Lưu ý:** `api_key` không dùng khi chỉ bấm **Chữ to**. Nếu sau này dùng **Phụ đề + dịch**, copy mẫu có API thật:  
-> `cp config/mac/deepseek.ini.example config.ini` rồi sửa `api_key`.
+Chi tiết từng tham số: `config/README.md`.
 
 **Không** đưa `config.ini` (có key thật) lên GitHub — file này đã nằm trong `.gitignore`.
 
@@ -294,7 +268,7 @@ Trên **mỗi** Mac mới:
 
 1. Làm lại **Phần A** (Homebrew, python, ffmpeg, blackhole).  
 2. `git clone` + `./install_mac.sh`.  
-3. Copy `config.ini` (USB / AirDrop / cloud) **hoặc** tạo lại từ `config.ini.example`.  
+3. Copy `config.ini` (USB / AirDrop / cloud) **hoặc** `cp config/mac/macbook-air.ini.example config.ini`.  
 4. Cấu hình lại Multi-Output + quyền Micro.  
 5. `./start_mac.sh`.
 
@@ -365,7 +339,17 @@ Tải tay: [existential.audio/blackhole](https://existential.audio/blackhole/)
 | `[display]` | `reader_font_size`, `reader_keep_lines` | Giao diện Chữ to |
 | `[api]` / `[translation]` | Chỉ khi dịch | Xem `config/README.md` |
 
-Mẫu theo nhà cung cấp API: `config/mac/*.ini.example` — `cp config/mac/deepseek.ini.example config.ini`
+Mẫu cấu hình trong `config/mac/`:
+
+| File | Dùng khi |
+|------|----------|
+| **`macbook-air.ini.example`** | MacBook Air M-series, Chữ to + tiếng Anh (khuyến nghị) |
+| `deepseek.ini.example` | Phụ đề + dịch qua DeepSeek |
+| `chatgpt.ini.example`, `gemini.ini.example`, … | API khác |
+
+```bash
+cp config/mac/macbook-air.ini.example config.ini
+```
 
 **Bảo mật:** Không commit `config.ini` lên Git.
 
@@ -383,4 +367,4 @@ Chi tiết FunASR: `FUNASR_GUIDE.md`
 
 ## License
 
-MIT — Copyright 2025 Nguyễn Văn Hiệp
+MIT — xem file [LICENSE](./LICENSE)

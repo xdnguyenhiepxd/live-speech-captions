@@ -1,0 +1,59 @@
+# macOS — MacBook Air (Apple Silicon M1/M2/M3/M4)
+# Mẫu tối ưu: Chữ to, tiếng Anh → chữ Anh, chạy theo khi nói (không bắt buộc API)
+#
+# Cài đặt:
+#   cp config/mac/macbook-air.ini.example config.ini
+#
+# Chỉ cần API khi bấm «Phụ đề + dịch». Chế độ «Chữ to» bỏ qua api_key thật.
+# API (tùy chọn): https://platform.deepseek.com/ hoặc để dummy như dưới
+
+[api]
+base_url = https://api.deepseek.com
+api_key = YOUR_API_KEY_HERE_OR_DUMMY_FOR_READER_ONLY
+
+[translation]
+model = deepseek-chat
+target_lang = Vietnamese
+threads = 2
+
+[display]
+display_duration = 10
+window_width = 800
+window_height = 120
+# Giao diện «Chữ to — chỉ nhận giọng»
+reader_font_size = 32
+reader_window_width = 920
+reader_keep_lines = 50
+
+[transcription]
+# MacBook Air: dùng MLX (GPU Apple), không dùng mlx trên Intel Mac
+backend = mlx
+# tiny.en = nhanh nhất | small.en = chính xác hơn | base.en = cân bằng
+whisper_model = small.en
+funasr_model = iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch
+device = auto
+compute_type = float16
+source_language = en
+transcription_workers = 1
+
+[audio]
+# auto = tự tìm BlackHole; hoặc số index (xem log khi chạy app)
+device_index = auto
+sample_rate = 16000
+silence_threshold = 0.005
+silence_duration = 0.45
+chunk_duration = 0.1
+max_phrase_duration = 6
+streaming_mode = true
+streaming_interval = 3
+streaming_step_size = 0.2
+streaming_overlap = 0.2
+# Chữ chạy theo khi nói (Chữ to bật reader_partial trong code)
+partial_updates = true
+reader_partial_updates = true
+reader_update_interval = 0.85
+partial_window_seconds = 2.5
+min_phrase_duration = 0.8
+standard_cut_duration = 1.0
+soft_cut_at_duration = 3.5
+update_interval = 1.2
