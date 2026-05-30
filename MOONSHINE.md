@@ -1,44 +1,75 @@
-# Thử Moonshine Streaming Small (Intel / live caption)
+# Thử Moonshine Streaming Small
 
-[Moonshine Voice](https://github.com/moonshine-ai/moonshine) có bản **streaming** tối ưu cho **nhận giọng real-time trên CPU** (không cần GPU). Model **`SMALL_STREAMING`** (~123M tham số) cân bằng tốc độ / độ chính xác tiếng Anh.
+## Tên package đúng
 
-## So với Whisper (faster-whisper) trong app hiện tại
-
-| | Whisper `distil-small.en` | Moonshine `SMALL_STREAMING` |
-|--|---------------------------|-----------------------------|
-| Tích hợp app | Có (`backend=whisper`) | **Chưa** — script thử riêng |
-| Streaming thật | Cắt câu + chạy lại model | Encoder cache, partial theo dòng |
-| Tiếng Anh | Có | Có (streaming EN) |
-| Intel CPU | ~0.9–2s E2E (tùy cấu hình) | Benchmark team ~**165ms**/chunk (Linux x86) |
-| Cài thêm | `faster-whisper` | `moonshine-voice` + tải model |
-
-## Cài và chạy thử (độc lập)
+Trên PyPI **không** có gói tên `moonshine` hay `moonshine-ai`. Cần cài:
 
 ```bash
-source .venv/bin/activate
-pip install -r requirements-moonshine.txt
+pip install moonshine-voice
+```
+
+Import trong Python:
+
+```python
+import moonshine_voice   # dấu gạch dưới, không phải moonshine-voice
+```
+
+---
+
+## Python 3.10.11 — cài đúng môi trường
+
+Lỗi thường gặp: cài bằng `pip` của Python khác (3.11/3.14) nhưng chạy bằng `python3.10`.
+
+```bash
+# Tạo venv bằng đúng 3.10
+python3.10 -m venv .venv-moonshine
+source .venv-moonshine/bin/activate
+
+python --version          # phải hiện 3.10.11
+python -m pip install --upgrade pip
+python -m pip install -r requirements-moonshine.txt
+
+python -c "import moonshine_voice; print('OK')"
 python test_moonshine_streaming.py
 ```
 
-Lần đầu sẽ **tải model** Moonshine (vài trăm MB) về cache.
+**Không** trộn với `.venv` của app chính nếu `.venv` dùng Python 3.14.
 
-Tùy chọn:
+---
 
-```bash
-python test_moonshine_streaming.py --arch tiny_streaming   # nhẹ hơn, kém chính xác hơn
-python test_moonshine_streaming.py --arch small_streaming  # mặc định
+## macOS 11 + MacBook Air Intel 2018 — quan trọng
+
+Bản có sẵn trên PyPI cho Mac:
+
+| Phiên bản | Wheel Mac |
+|-----------|-----------|
+| **0.0.59** | `macosx_15_0_universal2` → cần **macOS 15+** |
+| **0.0.61** | **Không** có wheel macOS (chỉ Linux ARM + Windows) |
+
+Trên **macOS 11 Big Sur**, `pip install moonshine-voice` thường báo:
+
+```text
+ERROR: No matching distribution found for moonshine-voice
 ```
 
-## Tích hợp vào live-speech-captions
+Đó **không phải** do Python 3.10.11 sai — **không có bản build** cho macOS 11 / Intel qua pip.
 
-Cần thêm `backend = moonshine` trong `transcriber.py` + nối `AudioCapture` → `moonshine_voice.Transcriber.create_stream().add_audio()`.
+### Bạn có thể làm gì?
 
-Ưu điểm: partial text theo dòng, latency thấp hơn khi đã streaming.  
-Nhược: dependency mới, model English streaming, chưa gắn overlay PyQt6 trong repo này.
+1. **Tiếp tục Whisper** (khuyến nghị trên máy này): `config/mac/macbook-air-intel.ini.example` + `distil-small.en` / `tiny.en`.
+2. Thử máy **macOS 15+** (Apple Silicon hoặc Mac mới) nếu muốn Moonshine.
+3. Theo dõi [moonshine-ai/moonshine](https://github.com/moonshine-ai/moonshine) — có thể sau này có wheel macOS cũ hơn.
 
-Nếu thử script ổn và muốn gắn vào **▶ Bắt đầu** / Chữ to, bật Agent mode và nhắn «tích hợp moonshine».
+---
 
-## Tham khảo
+## Chạy thử (khi pip cài được)
 
-- Model card: [UsefulSensors/moonshine-streaming-small](https://huggingface.co/UsefulSensors/moonshine-streaming-small)
-- Python: `ModelArch.SMALL_STREAMING` + `get_model_for_language("en", ...)`
+```bash
+python test_moonshine_streaming.py --arch small_streaming
+```
+
+---
+
+## So với app chính
+
+App `live-speech-captions` dùng **faster-whisper** — tương thích macOS 11 + Python 3.10. Moonshine chưa tích hợp vào Dashboard.

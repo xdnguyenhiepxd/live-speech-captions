@@ -28,8 +28,14 @@ def main():
             TranscriptEventListener,
             get_model_for_language,
         )
-    except ImportError:
-        print("Thiếu moonshine-voice. Chạy: pip install -r requirements-moonshine.txt")
+    except ImportError as e:
+        print("Không import được moonshine_voice.")
+        print(f"  Chi tiết: {e}")
+        print()
+        print("Kiểm tra:")
+        print("  1. Tên package: pip install moonshine-voice  (không phải «moonshine»)")
+        print("  2. Đúng Python:  python3.10 -m pip install -r requirements-moonshine.txt")
+        print("  3. macOS 11 / Intel: PyPI có thể KHÔNG có wheel — xem MOONSHINE.md")
         sys.exit(1)
 
     arch_map = {

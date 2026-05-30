@@ -35,7 +35,7 @@ Nếu **queue &gt; 200ms**: thường do nhiều job cũ — app giờ **chỉ g
 
 ## Thử Moonshine Streaming Small
 
-Model khác (streaming native, CPU): xem **[MOONSHINE.md](./MOONSHINE.md)** và `python test_moonshine_streaming.py`. Chưa gắn vào Dashboard — chỉ thử độc lập trước.
+Xem **[MOONSHINE.md](./MOONSHINE.md)**. **Lưu ý:** trên **macOS 11 + Intel**, `moonshine-voice` thường **không cài được** qua pip (wheel yêu cầu macOS 15+). Dùng Whisper trong app là lựa chọn phù hợp máy này.
 
 ## Ba chế độ cấu hình
 
