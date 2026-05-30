@@ -10,6 +10,13 @@ cp config/mac/macbook-air-intel.ini.example config.ini
 ./start_mac.sh
 ```
 
+**PyQt6** trong `requirements.txt` được ghim **6.5.4** + **PyQt6-sip 13.6.0** (tương thích macOS 11 / Intel). Nếu `pip` báo xung đột Qt6, cài tay:
+
+```bash
+source .venv/bin/activate
+pip install PyQt6==6.5.4 PyQt6-sip==13.6.0 PyQt6-Qt6==6.5.3
+```
+
 ## Model khuyến nghị
 
 | `whisper_model` | Kích thước | Tốc độ (Intel) | Độ chính xác EN |

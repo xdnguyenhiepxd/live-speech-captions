@@ -32,4 +32,4 @@ YouTube / tiếng hệ thống: cài BlackHole + Multi-Output — **[BLACKHOLE_S
 ./install_mac.sh
 ```
 
-Chỉ cần `requirements.txt` (PyQt6, faster-whisper, sounddevice) — **không** cần LLVM, không API key.
+Chỉ cần `requirements.txt` (PyQt6 **6.5.4**, faster-whisper, sounddevice) — **không** cần LLVM, không API key.

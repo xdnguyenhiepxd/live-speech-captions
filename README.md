@@ -21,7 +21,7 @@ Bấm **▶ Bắt đầu** trên bảng điều khiển.
 
 | Gói | Việc |
 |-----|------|
-| PyQt6 | Giao diện |
+| PyQt6 6.5.4 (+ sip 13.6.0) | Giao diện (ghim cho macOS 11 / Intel) |
 | faster-whisper | Nhận giọng (Intel / Windows) |
 | mlx-whisper | Nhận giọng (Apple Silicon, tự cài trên arm64) |
 | sounddevice | Bắt âm thanh |

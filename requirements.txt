@@ -1,5 +1,9 @@
 # Nhận giọng tiếng Anh → hiển thị chữ (Whisper / MLX). Không cần LLVM, không API.
-PyQt6
+# PyQt6: ghim cho macOS 11 / MacBook Air Intel (tránh bản Qt6 mới lỗi cài/build)
+PyQt6==6.5.4
+PyQt6-sip==13.6.0
+PyQt6-Qt6==6.5.3
+
 faster-whisper
 mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
 sounddevice
