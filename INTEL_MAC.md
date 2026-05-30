@@ -17,12 +17,26 @@ source .venv/bin/activate
 pip install PyQt6==6.5.4 PyQt6-sip==13.6.0 PyQt6-Qt6==6.5.3
 ```
 
+## Log thời gian (terminal)
+
+Với `log_latency = true` (mặc định trên bản Intel):
+
+```
+[AUDIO] chunk=2 final | 1.10s audio | → gửi ASR @ 14:32:01
+[LATENCY] final chunk=2 | audio=1.10s | queue=3ms | asr=420ms | text="hello world"
+[LATENCY] final chunk=2 | E2E=425ms (âm thanh → chữ trên màn hình)
+```
+
+- **asr**: thời gian model chạy  
+- **queue**: chờ thread ASR  
+- **E2E**: từ lúc cắt âm → hiện chữ  
+
 ## Model khuyến nghị
 
 | `whisper_model` | Kích thước | Tốc độ (Intel) | Độ chính xác EN |
 |-----------------|----------|----------------|-----------------|
-| **`distil-small.en`** ⭐ | ~166M | Nhanh | Tốt hơn `base.en` (mặc định) |
-| `tiny.en` | ~39M | Nhanh nhất | Thấp hơn |
+| **`tiny.en`** ⭐ (mặc định) | ~39M | Nhanh nhất | Đủ YouTube / họp EN |
+| `distil-small.en` | ~166M | Chậm hơn ~3–5× | Tốt hơn tiny |
 | `base.en` | ~74M | Nhanh | Ổn |
 | `small.en` | ~244M | Chậm trên Air cũ | Cao |
 | `distil-medium.en` | ~394M | Chậm | Cao hơn distil-small |
@@ -42,17 +56,19 @@ rm -rf ~/.cache/huggingface/hub/models--distil-whisper--distil-small.en
 
 ```ini
 [transcription]
-backend = whisper
-whisper_model = distil-small.en
-device = cpu
-compute_type = int8
-source_language = en
-beam_size = 1
-cpu_threads = 2
+whisper_model = tiny.en
+vad_filter = false
+max_transcribe_seconds = 3.0
+log_latency = true
+cpu_threads = 4
 
 [audio]
+max_phrase_duration = 3.0
 reader_partial_updates = false
+standard_cut_duration = 0.75
 ```
+
+Bản **chính xác hơn**: `macbook-air-intel-accurate.ini.example` (`distil-small.en`).
 
 - **`beam_size = 1`**: nhanh nhất, đủ cho phụ đề live.
 - **`cpu_threads`**: 2–4 tùy số nhân (Air 2018 thường 2–4 nhân logic).

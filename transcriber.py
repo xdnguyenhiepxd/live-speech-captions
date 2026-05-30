@@ -28,6 +28,10 @@ class Transcriber:
         language=None,
         beam_size=1,
         cpu_threads=0,
+        vad_filter=False,
+        max_transcribe_seconds=4.0,
+        log_latency=True,
+        sample_rate=16000,
     ):
         """
         Initialize Transcriber with multiple backend support
@@ -50,6 +54,10 @@ class Transcriber:
         )
         self.model = None
         self._is_distil = False
+        self.vad_filter = vad_filter
+        self.max_transcribe_seconds = max(1.0, float(max_transcribe_seconds))
+        self.log_latency = log_latency
+        self.sample_rate = sample_rate
 
         if self.backend == "funasr":
             self._init_funasr(model_size, device)
@@ -403,14 +411,38 @@ class Transcriber:
         # Default to CPU
         print("[Transcriber] No compatible GPU detected, using CPU")
         return "cpu"
-    def transcribe(self, audio_data, prompt=None):
-        """Transcribe audio using the configured backend"""
+    def transcribe(self, audio_data, prompt=None, latency_meta=None):
+        """Transcribe audio using the configured backend. latency_meta: dict for E2E logs."""
+        import time
+
+        audio = np.asarray(audio_data, dtype=np.float32)
+        sr = self.sample_rate
+        if latency_meta and "sample_rate" in latency_meta:
+            sr = latency_meta["sample_rate"]
+        max_samples = int(self.max_transcribe_seconds * sr)
+        if len(audio) > max_samples:
+            audio = audio[-max_samples:]
+
+        t_asr0 = time.perf_counter()
         if self.backend == "funasr":
-            text = self._transcribe_funasr(audio_data, prompt)
+            text = self._transcribe_funasr(audio, prompt)
         elif self.backend == "mlx":
-            text = self._transcribe_mlx(audio_data, prompt)
-        else:  # whisper
-            text = self._transcribe_faster_whisper(audio_data, prompt)
+            text = self._transcribe_mlx(audio, prompt)
+        else:
+            text = self._transcribe_faster_whisper(audio, prompt)
+        asr_ms = (time.perf_counter() - t_asr0) * 1000
+
+        if self.log_latency or latency_meta:
+            audio_s = len(audio) / sr
+            parts = [f"audio={audio_s:.2f}s", f"asr={asr_ms:.0f}ms"]
+            if latency_meta:
+                t_cap = latency_meta.get("t_captured")
+                if t_cap is not None:
+                    parts.append(f"queue={(t_asr0 - t_cap) * 1000:.0f}ms")
+            parts.append(f'text="{ (text or "")[:50]}{"…" if text and len(text) > 50 else ""}"')
+            label = latency_meta.get("kind", "asr") if latency_meta else "asr"
+            cid = latency_meta.get("chunk_id", "?") if latency_meta else "?"
+            print(f"[LATENCY] {label} chunk={cid} | " + " | ".join(parts))
             
         # Filter hallucinations (infinite loops, e.g. "once once once")
         if self._is_hallucination(text):
@@ -622,15 +654,19 @@ class Transcriber:
 
     def _transcribe_faster_whisper(self, audio_data, prompt=None):
         lang = self.language or ("en" if self._is_distil else None)
-        segments, _ = self.model.transcribe(
-            audio_data,
+        kwargs = dict(
             language=lang,
             beam_size=self.beam_size,
+            best_of=1,
+            temperature=0.0,
             condition_on_previous_text=False,
-            initial_prompt=prompt,
             no_speech_threshold=0.6,
-            vad_filter=True,
+            vad_filter=self.vad_filter,
             without_timestamps=True,
+            word_timestamps=False,
         )
+        if prompt:
+            kwargs["initial_prompt"] = prompt
+        segments, _ = self.model.transcribe(audio_data, **kwargs)
         text = " ".join(segment.text for segment in segments).strip()
         return text

@@ -64,6 +64,10 @@ class Pipeline(QObject):
             language=config.source_language,
             beam_size=config.whisper_beam_size,
             cpu_threads=config.cpu_threads,
+            vad_filter=config.vad_filter,
+            max_transcribe_seconds=config.max_transcribe_seconds,
+            log_latency=config.log_latency,
+            sample_rate=config.sample_rate,
         )
 
         self.partial_updates = config.reader_partial_updates
@@ -144,8 +148,15 @@ class Pipeline(QObject):
                     prompt = self.last_final_text
                     overall_rms = np.sqrt(np.mean(final_buffer**2))
                     if overall_rms >= self.audio.silence_threshold:
+                        t_cap = time.perf_counter()
+                        dur = len(final_buffer) / self.audio.sample_rate
+                        if config.log_latency:
+                            print(
+                                f"[AUDIO] chunk={cid} final | {dur:.2f}s audio | "
+                                f"→ gửi ASR @ {time.strftime('%H:%M:%S')}"
+                            )
                         transcribe_executor.submit(
-                            self._process_final_chunk, final_buffer, cid, prompt
+                            self._process_final_chunk, final_buffer, cid, prompt, t_cap
                         )
                     buffer = np.array([], dtype=np.float32)
                     chunk_id += 1
@@ -164,10 +175,25 @@ class Pipeline(QObject):
                     rms = np.sqrt(np.mean(partial_buffer**2))
                     if rms > self.audio.silence_threshold:
                         if self._asr_busy:
-                            self._pending_partial = (partial_buffer.copy(), chunk_id, prompt)
+                            self._pending_partial = (
+                                partial_buffer.copy(),
+                                chunk_id,
+                                prompt,
+                                t_cap,
+                            )
                         else:
+                            t_cap = time.perf_counter()
+                            if config.log_latency:
+                                pdur = len(partial_buffer) / self.audio.sample_rate
+                                print(
+                                    f"[AUDIO] chunk={chunk_id} partial | {pdur:.2f}s | → ASR"
+                                )
                             transcribe_executor.submit(
-                                self._process_partial_chunk, partial_buffer, chunk_id, prompt
+                                self._process_partial_chunk,
+                                partial_buffer,
+                                chunk_id,
+                                prompt,
+                                t_cap,
                             )
                     last_update_time = now
 
@@ -176,14 +202,31 @@ class Pipeline(QObject):
         finally:
             transcribe_executor.shutdown(wait=False)
 
-    def _process_partial_chunk(self, audio_data, chunk_id, prompt=""):
+    def _latency_meta(self, chunk_id, kind, t_captured):
+        return {
+            "chunk_id": chunk_id,
+            "kind": kind,
+            "t_captured": t_captured,
+            "sample_rate": self.audio.sample_rate,
+        }
+
+    def _emit_text(self, chunk_id, text, t_captured, kind):
+        t_emit = time.perf_counter()
+        self.signals.update_text.emit(chunk_id, text, "")
+        if config.log_latency and t_captured is not None:
+            e2e_ms = (t_emit - t_captured) * 1000
+            print(
+                f"[LATENCY] {kind} chunk={chunk_id} | E2E={e2e_ms:.0f}ms "
+                f"(âm thanh → chữ trên màn hình)"
+            )
+
+    def _process_partial_chunk(self, audio_data, chunk_id, prompt="", t_captured=None):
         self._asr_busy = True
         try:
-            t0 = time.time()
-            text = self.transcriber.transcribe(audio_data, prompt=prompt)
+            meta = self._latency_meta(chunk_id, "partial", t_captured)
+            text = self.transcriber.transcribe(audio_data, prompt=prompt, latency_meta=meta)
             if text:
-                self.signals.update_text.emit(chunk_id, text, "")
-                print(f"[Partial {chunk_id}] {time.time() - t0:.2f}s: {text[:60]}...")
+                self._emit_text(chunk_id, text, t_captured, "partial")
         except Exception as e:
             print(f"[Partial {chunk_id}] Error: {e}")
         finally:
@@ -197,18 +240,18 @@ class Pipeline(QObject):
         pending = self._pending_partial
         if pending and not self._asr_busy:
             self._pending_partial = None
-            buf, cid, prompt = pending
-            executor.submit(self._process_partial_chunk, buf, cid, prompt)
+            buf, cid, prompt, t_cap = pending
+            executor.submit(self._process_partial_chunk, buf, cid, prompt, t_cap)
 
-    def _process_final_chunk(self, audio_data, chunk_id, prompt=""):
+    def _process_final_chunk(self, audio_data, chunk_id, prompt="", t_captured=None):
         self._asr_busy = True
         try:
-            text = self.transcriber.transcribe(audio_data, prompt=prompt)
+            meta = self._latency_meta(chunk_id, "final", t_captured)
+            text = self.transcriber.transcribe(audio_data, prompt=prompt, latency_meta=meta)
             if text:
-                print(f"[Final {chunk_id}] {text}")
                 if len(text.split()) > 2:
                     self.last_final_text = text
-                self.signals.update_text.emit(chunk_id, text, "")
+                self._emit_text(chunk_id, text, t_captured, "final")
         except Exception as e:
             print(f"[Final {chunk_id}] Error: {e}")
         finally:

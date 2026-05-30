@@ -1,0 +1,30 @@
+# Intel — cân bằng chính xác / tốc độ (chậm hơn tiny.en)
+#   cp config/mac/macbook-air-intel-accurate.ini.example config.ini
+
+[display]
+reader_font_size = 32
+reader_window_width = 920
+reader_keep_lines = 50
+
+[transcription]
+backend = whisper
+whisper_model = distil-small.en
+device = cpu
+compute_type = int8
+source_language = en
+beam_size = 1
+cpu_threads = 4
+vad_filter = false
+max_transcribe_seconds = 4.0
+log_latency = true
+
+[audio]
+device_index = auto
+sample_rate = 16000
+silence_threshold = 0.005
+silence_duration = 0.45
+max_phrase_duration = 4.0
+reader_partial_updates = false
+min_phrase_duration = 0.7
+standard_cut_duration = 1.0
+soft_cut_at_duration = 3.5
