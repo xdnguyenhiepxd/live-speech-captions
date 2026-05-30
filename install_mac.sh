@@ -24,12 +24,13 @@ pip install -r requirements.txt
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ]; then
-    echo "  → Apple Silicon: dùng backend=mlx trong config.ini"
+    echo "  → Apple Silicon:"
+    echo "     cp config/mac-gpu.ini.example config.ini"
 else
     echo "  → Intel Mac:"
-    echo "     cp config/mac/macbook-air-intel.ini.example config.ini"
-    echo "     (model distil-small.en — xem INTEL_MAC.md)"
+    echo "     cp config/mac-cpu.ini.example config.ini"
 fi
+echo "  (Whisper + OpenAI + Gemini trong cùng file — xem config/README.md)"
 
 echo "[3/3] Kiểm tra ffmpeg / BlackHole..."
 if ! command -v ffmpeg &> /dev/null; then

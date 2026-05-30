@@ -1,8 +1,8 @@
-# MacBook Air Intel — CÂN BẰNG (chính xác + đủ câu). Mặc định khuyến nghị.
-#   cp config/mac/macbook-air-intel.ini.example config.ini
+# Windows — GPU NVIDIA (CUDA).
+#   copy config\windows-gpu.ini.example config.ini
 #
-# Chỉ cần tốc độ tối đa (dễ sai từ / cắt cụt): macbook-air-intel-fast.ini.example
-# Chính xác cao hơn (chậm): macbook-air-intel-accurate.ini.example
+# backend: whisper | deepgram (realtime) | openai | gemini
+# Cần nvidia-smi — WINDOWS.md
 
 [display]
 reader_font_size = 32
@@ -12,15 +12,28 @@ reader_keep_lines = 50
 [transcription]
 backend = whisper
 whisper_model = distil-small.en
-device = cpu
-compute_type = int8
+device = cuda
+compute_type = float16
 source_language = en
 beam_size = 1
-cpu_threads = 4
+cpu_threads = 0
 vad_filter = false
 max_transcribe_seconds = 8.0
 log_latency = true
 use_context_prompt = true
+cloud_partial = false
+cloud_min_request_interval = 13.0
+realtime_mode = true
+
+[api]
+deepgram_api_key =
+deepgram_model = nova-3
+deepgram_language = en
+openai_api_key =
+openai_base_url =
+openai_stt_model = gpt-4o-mini-transcribe
+gemini_api_key =
+gemini_model = gemini-2.5-flash
 
 [audio]
 device_index = auto
@@ -31,7 +44,7 @@ chunk_duration = 0.1
 streaming_step_size = 0.2
 max_phrase_duration = 6.0
 reader_partial_updates = true
-reader_update_interval = 1.0
+reader_update_interval = 0.85
 partial_window_seconds = 2.5
 min_phrase_duration = 0.8
 standard_cut_duration = 1.0

@@ -1,8 +1,10 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QFrame, QComboBox, QLineEdit, 
-                             QTabWidget, QSpinBox, QDoubleSpinBox, QGridLayout,
-                             QScrollArea, QSizePolicy, QSpacerItem, QFormLayout, QApplication,
-                             QMessageBox, QTextEdit, QDialog)
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QComboBox, QLineEdit,
+    QTabWidget, QSpinBox, QDoubleSpinBox, QGridLayout,
+    QFormLayout, QApplication, QMessageBox, QTextEdit, QDialog,
+    QGroupBox, QCheckBox,
+)
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QThread
 from PyQt6.QtGui import QFont, QIcon, QColor
 import sys
@@ -113,6 +115,7 @@ class Dashboard(QWidget):
         self.init_audio_tab()
         self.init_device_manager_tab()
         self.init_transcription_tab()
+        self.init_cloud_tab()
         
         # Footer Actions
         footer = QHBoxLayout()
@@ -149,10 +152,26 @@ class Dashboard(QWidget):
         layout.addWidget(self.start_btn)
         layout.addWidget(self.stop_btn)
 
-        info = QLabel("Tiếng Anh (hoặc ngôn ngữ trong config) → chữ lớn trên màn hình. <b>Không cần API.</b>")
-        info.setTextFormat(Qt.TextFormat.RichText)
-        info.setStyleSheet("color: #6c7086; font-style: italic;")
-        layout.addWidget(info)
+        self.mode_hint = QLabel()
+        self.mode_hint.setTextFormat(Qt.TextFormat.RichText)
+        self.mode_hint.setWordWrap(True)
+        self.mode_hint.setStyleSheet(
+            "color: #6c7086; font-size: 13px; padding: 8px; "
+            "background: #313244; border-radius: 8px;"
+        )
+        self._update_mode_hint()
+        layout.addWidget(self.mode_hint)
+
+        quick = QHBoxLayout()
+        btn_local = QPushButton("🖥 Local Whisper")
+        btn_local.setToolTip("Tab «Nhận giọng» → whisper / mlx")
+        btn_local.clicked.connect(lambda: self.tabs.setCurrentIndex(3))
+        btn_cloud = QPushButton("☁️ Cloud API")
+        btn_cloud.setToolTip("Tab «Cloud API» → OpenAI hoặc Gemini")
+        btn_cloud.clicked.connect(lambda: self.tabs.setCurrentIndex(4))
+        quick.addWidget(btn_local)
+        quick.addWidget(btn_cloud)
+        layout.addLayout(quick)
         
         tab.setLayout(layout)
         self.tabs.addTab(tab, "🏠 Trang chủ")
@@ -492,18 +511,54 @@ class Dashboard(QWidget):
             self.device_status.setText(f"❌ Lỗi: {str(e)}")
             self.device_status.setStyleSheet("color: #f38ba8;")
 
+    def _update_mode_hint(self):
+        b = config.asr_backend
+        if b == "deepgram":
+            self.mode_hint.setText(
+                "<b>Chế độ:</b> ⚡ Realtime — <span style='color:#89b4fa'>Deepgram streaming</span><br>"
+                "Chữ cập nhật liên tục (partial). Cần API key Deepgram."
+            )
+        elif b in ("openai", "gemini"):
+            name = "ChatGPT / OpenAI" if b == "openai" else "Google Gemini"
+            self.mode_hint.setText(
+                f"<b>Chế độ:</b> ☁️ Cloud — <span style='color:#89b4fa'>{name}</span><br>"
+                "Âm thanh máy → API → chữ. Cần API key (tab Cloud API). "
+                "Nhanh hơn CPU yếu, có phí theo usage."
+            )
+        else:
+            self.mode_hint.setText(
+                "<b>Chế độ:</b> 🖥 Local — Whisper trên máy<br>"
+                "Không cần API. Nếu quá chậm → tab <b>Cloud API</b> "
+                "hoặc đổi Engine thành <i>openai</i> / <i>gemini</i>."
+            )
+
     def init_transcription_tab(self):
         tab = QWidget()
         layout = QFormLayout()
-        
-        # ASR Backend Selection
-        self.asr_backend = QComboBox()
-        self.asr_backend.addItems(["whisper", "mlx"])
-        self.asr_backend.setCurrentText(
-            config.asr_backend if config.asr_backend in ("whisper", "mlx") else "whisper"
+
+        engine_hint = QLabel(
+            "Realtime: deepgram (WebSocket). Local: whisper / mlx. "
+            "Batch cloud: openai / gemini."
         )
-        self.asr_backend.setToolTip("mlx: Apple Silicon | whisper: Intel / Windows / CPU")
+        engine_hint.setWordWrap(True)
+        engine_hint.setStyleSheet("color: #6c7086; font-size: 12px;")
+        layout.addRow(engine_hint)
+
+        self.asr_backend = QComboBox()
+        self.asr_backend.addItems(["whisper", "mlx", "deepgram", "openai", "gemini"])
+        backends = [self.asr_backend.itemText(i) for i in range(self.asr_backend.count())]
+        self.asr_backend.setCurrentText(
+            config.asr_backend if config.asr_backend in backends else "whisper"
+        )
+        self.asr_backend.setToolTip(
+            "deepgram: realtime streaming | whisper/mlx: local | openai/gemini: cloud batch"
+        )
+        self.asr_backend.currentTextChanged.connect(self._on_backend_changed)
         layout.addRow("Engine ASR:", self.asr_backend)
+
+        self.local_asr_group = QGroupBox("Whisper trên máy (local)")
+        local_form = QFormLayout()
+        self.local_asr_group.setLayout(local_form)
 
         self.whisper_model = QComboBox()
         self.whisper_model.addItems([
@@ -517,30 +572,246 @@ class Dashboard(QWidget):
         ])
         self.whisper_model.setCurrentText(config.whisper_model)
         self.whisper_model.setToolTip(
-            "Intel Mac: distil-small.en (nhẹ + chính xác EN). M-chip: dùng mlx + small.en"
+            "Intel Mac / Win CPU: distil-small.en. M-chip: mlx + small.en"
         )
-        layout.addRow("Model Whisper:", self.whisper_model)
-        
+        local_form.addRow("Model Whisper:", self.whisper_model)
+
         self.device_type = QComboBox()
         self.device_type.addItems(["cpu", "cuda", "mps", "auto"])
         self.device_type.setCurrentText(config.whisper_device)
-        layout.addRow("Thiết bị tính toán:", self.device_type)
+        local_form.addRow("Thiết bị tính toán:", self.device_type)
 
         self.compute_type = QComboBox()
         self.compute_type.addItems(["int8", "float16", "float32"])
         self.compute_type.setCurrentText(config.whisper_compute_type)
-        layout.addRow("Lượng tử hóa:", self.compute_type)
-        
-        # Source Language Configuration
+        local_form.addRow("Lượng tử hóa:", self.compute_type)
+        layout.addRow(self.local_asr_group)
+
         self.source_language = QComboBox()
         self.source_language.setEditable(True)
-        self.source_language.addItems(["auto", "en", "zh", "vi", "ja", "ko", "es", "fr", "de", "ru", "ar", "pt", "it"])
+        self.source_language.addItems(
+            ["auto", "en", "zh", "vi", "ja", "ko", "es", "fr", "de", "ru", "ar", "pt", "it"]
+        )
         source_lang = config.source_language if config.source_language else "en"
         self.source_language.setCurrentText(source_lang if source_lang else "en")
         layout.addRow("Ngôn ngữ nguồn:", self.source_language)
-        
+
+        self.cloud_partial = QCheckBox("Bật partial khi dùng Cloud (tốn API hơn)")
+        self.cloud_partial.setChecked(config.cloud_partial)
+        layout.addRow(self.cloud_partial)
+
         tab.setLayout(layout)
         self.tabs.addTab(tab, "📝 Nhận giọng")
+        self._on_backend_changed(self.asr_backend.currentText())
+
+    def _on_backend_changed(self, backend: str):
+        is_cloud = backend in ("openai", "gemini", "deepgram")
+        self.local_asr_group.setEnabled(not is_cloud)
+        self.local_asr_group.setVisible(not is_cloud)
+        if hasattr(self, "mode_hint"):
+            self._update_mode_hint()
+
+    def init_cloud_tab(self):
+        tab = QWidget()
+        outer = QVBoxLayout()
+        outer.setSpacing(12)
+
+        intro = QLabel(
+            "<b>Realtime khuyến nghị:</b> Engine = <b>deepgram</b> (streaming).<br>"
+            "OpenAI/Gemini = gửi từng đoạn (chậm, dễ 429). Key Deepgram: console.deepgram.com"
+        )
+        intro.setWordWrap(True)
+        intro.setTextFormat(Qt.TextFormat.RichText)
+        intro.setStyleSheet("color: #a6adc8; font-size: 13px;")
+        outer.addWidget(intro)
+
+        dg_box = QGroupBox("Deepgram — Realtime streaming (khuyến nghị)")
+        dform = QFormLayout()
+        self.deepgram_api_key = QLineEdit()
+        self.deepgram_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.deepgram_api_key.setPlaceholderText("DEEPGRAM_API_KEY hoặc console.deepgram.com")
+        if config.deepgram_api_key:
+            self.deepgram_api_key.setPlaceholderText("(đã lưu — nhập mới để thay)")
+        dform.addRow("API key:", self.deepgram_api_key)
+        self.deepgram_model = QComboBox()
+        self.deepgram_model.setEditable(True)
+        self.deepgram_model.addItems(["nova-3", "nova-2", "nova-2-general"])
+        self.deepgram_model.setCurrentText(config.deepgram_model)
+        dform.addRow("Model:", self.deepgram_model)
+        self.deepgram_language = QComboBox()
+        self.deepgram_language.setEditable(True)
+        self.deepgram_language.addItems(["en", "en-IN", "en-US", "hi", "ta"])
+        self.deepgram_language.setCurrentText(config.deepgram_language)
+        dform.addRow("Ngôn ngữ:", self.deepgram_language)
+        dg_box.setLayout(dform)
+        outer.addWidget(dg_box)
+
+        openai_box = QGroupBox("OpenAI / ChatGPT (Speech-to-Text)")
+        oform = QFormLayout()
+        self.openai_api_key = QLineEdit()
+        self.openai_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.openai_api_key.setPlaceholderText("sk-… hoặc để trống nếu dùng OPENAI_API_KEY")
+        if config.openai_api_key:
+            self.openai_api_key.setPlaceholderText("(đã lưu — nhập mới để thay)")
+        oform.addRow("API key:", self.openai_api_key)
+
+        self.openai_base_url = QLineEdit()
+        self.openai_base_url.setText(config.openai_base_url or "")
+        self.openai_base_url.setPlaceholderText("https://api.openai.com/v1 (mặc định)")
+        oform.addRow("Base URL:", self.openai_base_url)
+
+        self.openai_stt_model = QComboBox()
+        self.openai_stt_model.setEditable(True)
+        self.openai_stt_model.addItems(
+            ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"]
+        )
+        self.openai_stt_model.setCurrentText(config.openai_stt_model)
+        oform.addRow("Model STT:", self.openai_stt_model)
+        openai_box.setLayout(oform)
+        outer.addWidget(openai_box)
+
+        gemini_box = QGroupBox("Google Gemini")
+        gform = QFormLayout()
+        self.gemini_api_key = QLineEdit()
+        self.gemini_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_api_key.setPlaceholderText("AIza… hoặc GEMINI_API_KEY")
+        if config.gemini_api_key:
+            self.gemini_api_key.setPlaceholderText("(đã lưu — nhập mới để thay)")
+        gform.addRow("API key:", self.gemini_api_key)
+
+        self.gemini_model = QComboBox()
+        self.gemini_model.setEditable(True)
+        self.gemini_model.addItems(
+            [
+                "gemini-2.5-flash",
+                "gemini-2.5-flash-lite",
+                "gemini-3-flash-preview",
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-lite",
+            ]
+        )
+        self.gemini_model.setCurrentText(config.gemini_model)
+        gform.addRow("Model:", self.gemini_model)
+        gemini_box.setLayout(gform)
+        outer.addWidget(gemini_box)
+
+        test_row = QHBoxLayout()
+        self.test_openai_btn = QPushButton("Kiểm tra OpenAI")
+        self.test_openai_btn.clicked.connect(lambda: self._test_cloud_api("openai"))
+        self.test_gemini_btn = QPushButton("Kiểm tra Gemini")
+        self.test_gemini_btn.clicked.connect(lambda: self._test_cloud_api("gemini"))
+        self.test_deepgram_btn = QPushButton("Kiểm tra Deepgram")
+        self.test_deepgram_btn.clicked.connect(lambda: self._test_cloud_api("deepgram"))
+        test_row.addWidget(self.test_deepgram_btn)
+        test_row.addWidget(self.test_openai_btn)
+        test_row.addWidget(self.test_gemini_btn)
+        outer.addLayout(test_row)
+
+        self.cloud_status = QLabel(
+            "Key: console.deepgram.com · platform.openai.com · aistudio.google.com"
+        )
+        self.cloud_status.setWordWrap(True)
+        self.cloud_status.setStyleSheet("color: #6c7086; font-size: 12px;")
+        outer.addWidget(self.cloud_status)
+
+        outer.addStretch()
+        tab.setLayout(outer)
+        self.tabs.addTab(tab, "☁️ Cloud API")
+
+    def _test_cloud_api(self, provider: str):
+        from config import reload_config
+
+        self.save_config(silent=True)
+        reload_config()
+        from config import config as cfg
+
+        for btn in (
+            getattr(self, "test_deepgram_btn", None),
+            self.test_openai_btn,
+            self.test_gemini_btn,
+        ):
+            if btn:
+                btn.setEnabled(False)
+
+        if provider == "deepgram":
+            key = self.deepgram_api_key.text().strip() or cfg.deepgram_api_key
+            if not key:
+                self._enable_cloud_test_buttons()
+                QMessageBox.warning(
+                    self,
+                    "Thiếu Deepgram key",
+                    "Nhập API key Deepgram.\n\n"
+                    "Tab «Nhận giọng» → Engine = deepgram.",
+                )
+                return
+            self.cloud_status.setText("Đang kiểm tra Deepgram WebSocket…")
+            worker = CloudTestWorker(
+                "deepgram",
+                key,
+                deepgram_model=self.deepgram_model.currentText(),
+            )
+        elif provider == "openai":
+            key = self.openai_api_key.text().strip() or cfg.openai_api_key
+            if not key:
+                self._enable_cloud_test_buttons()
+                QMessageBox.warning(
+                    self,
+                    "Thiếu OpenAI key",
+                    "Nhập API key OpenAI (sk-…).\n\n"
+                    "Tab «Nhận giọng» → Engine phải là openai nếu dùng ChatGPT.",
+                )
+                return
+            self.cloud_status.setText("Đang kiểm tra OpenAI… (10–30 giây)")
+            worker = CloudTestWorker(
+                "openai", key,
+                openai_base_url=self.openai_base_url.text().strip() or None,
+                openai_model=self.openai_stt_model.currentText(),
+            )
+        else:
+            key = self.gemini_api_key.text().strip() or cfg.gemini_api_key
+            if not key:
+                self._enable_cloud_test_buttons()
+                QMessageBox.warning(
+                    self,
+                    "Thiếu Gemini key",
+                    "Nhập API key Gemini (AIza…).\n\n"
+                    "Tab «Nhận giọng» → Engine phải là gemini nếu dùng Google.",
+                )
+                return
+            self.cloud_status.setText("Đang kiểm tra Gemini… (10–30 giây)")
+            worker = CloudTestWorker(
+                "gemini", key,
+                gemini_model=self.gemini_model.currentText(),
+            )
+
+        worker.finished.connect(self._on_cloud_test_done)
+        worker.start()
+        self._cloud_test_worker = worker
+
+    def _enable_cloud_test_buttons(self):
+        for btn in (
+            getattr(self, "test_deepgram_btn", None),
+            self.test_openai_btn,
+            self.test_gemini_btn,
+        ):
+            if btn:
+                btn.setEnabled(True)
+
+    def _on_cloud_test_done(self, ok: bool, message: str):
+        self._enable_cloud_test_buttons()
+        if ok:
+            self.cloud_status.setText(f"✅ {message}")
+            self.cloud_status.setStyleSheet("color: #a6e3a1; font-size: 12px;")
+            QMessageBox.information(self, "Kiểm tra API — OK", message)
+        else:
+            self.cloud_status.setText(f"❌ {message}")
+            self.cloud_status.setStyleSheet("color: #f38ba8; font-size: 12px;")
+            QMessageBox.critical(
+                self,
+                "Kiểm tra API — lỗi",
+                message
+                + "\n\nGợi ý: pip install -r requirements.txt",
+            )
 
     def populate_devices(self):
         self.device_combo.clear()
@@ -561,42 +832,104 @@ class Dashboard(QWidget):
         except Exception as e:
             self.device_combo.addItem(f"Lỗi: {e}")
 
-    def save_config(self):
+    def save_config(self, silent=False):
         import configparser
         import os
-        
-        # Update config object logic would go here, 
-        # Ghi trực tiếp config.ini
-        
+        from config import reload_config
+
         cp = configparser.ConfigParser()
         config_path = os.path.join(os.path.dirname(__file__), "config.ini")
-        cp.read(config_path)
-        
-        if not cp.has_section("audio"): cp.add_section("audio")
-        if not cp.has_section("transcription"): cp.add_section("transcription")
-        if not cp.has_section("display"): cp.add_section("display")
-        
-        # Audio
+        if os.path.exists(config_path):
+            cp.read(config_path)
+
+        for section in ("audio", "transcription", "display", "api"):
+            if not cp.has_section(section):
+                cp.add_section(section)
+
         idx = self.device_combo.currentData()
         cp.set("audio", "device_index", str(idx) if idx is not None else "auto")
         cp.set("audio", "sample_rate", str(self.sample_rate.value()))
         cp.set("audio", "silence_threshold", str(self.silence_thresh.value()))
         cp.set("audio", "silence_duration", str(self.silence_dur.value()))
-        
-        # Transcription
+
         cp.set("transcription", "backend", self.asr_backend.currentText())
         cp.set("transcription", "whisper_model", self.whisper_model.currentText())
         cp.set("transcription", "device", self.device_type.currentText())
         cp.set("transcription", "compute_type", self.compute_type.currentText())
         cp.set("transcription", "source_language", self.source_language.currentText())
+        cp.set("transcription", "cloud_partial", str(self.cloud_partial.isChecked()).lower())
 
-        with open(config_path, 'w') as f:
+        new_openai = self.openai_api_key.text().strip()
+        if new_openai:
+            cp.set("api", "openai_api_key", new_openai)
+        new_gemini = self.gemini_api_key.text().strip()
+        if new_gemini:
+            cp.set("api", "gemini_api_key", new_gemini)
+        cp.set("api", "openai_base_url", self.openai_base_url.text().strip())
+        cp.set("api", "openai_stt_model", self.openai_stt_model.currentText())
+        cp.set("api", "gemini_model", self.gemini_model.currentText())
+        new_dg = self.deepgram_api_key.text().strip()
+        if new_dg:
+            cp.set("api", "deepgram_api_key", new_dg)
+        cp.set("api", "deepgram_model", self.deepgram_model.currentText())
+        cp.set("api", "deepgram_language", self.deepgram_language.currentText())
+        if self.asr_backend.currentText() == "deepgram":
+            cp.set("transcription", "realtime_mode", "true")
+
+        with open(config_path, "w", encoding="utf-8") as f:
             cp.write(f)
-            
-        self.status_label.setText("Đã lưu! Khởi động lại nếu cần.")
+
+        reload_config()
+        self._update_mode_hint()
+        if not silent:
+            self.status_label.setText("Đã lưu cấu hình.")
+            QMessageBox.information(
+                self,
+                "Đã lưu",
+                "Đã ghi config.ini.\nBấm «▶ Bắt đầu» trên tab Trang chủ.",
+            )
+
+    def _validate_cloud_ready(self) -> bool:
+        from config import config as cfg
+
+        if not cfg.is_cloud_asr():
+            return True
+        provider = cfg.asr_backend
+        if provider == "deepgram":
+            key = cfg.deepgram_api_key
+            name = "Deepgram"
+        elif provider == "openai":
+            key = cfg.openai_api_key
+            name = "OpenAI (sk-…)"
+        else:
+            key = cfg.gemini_api_key
+            name = "Gemini (AIza…)"
+        if key:
+            return True
+        QMessageBox.warning(
+            self,
+            "Thiếu API key",
+            f"Engine đang là «{provider}» nhưng chưa có key {name}.\n\n"
+            "1. Tab «☁️ Cloud API» → dán key → Lưu cấu hình\n"
+            "2. Hoặc đổi Engine cho khớp key đã nhập",
+        )
+        self.tabs.setCurrentIndex(4)
+        return False
 
     def on_start(self):
-        self.status_label.setText("Đang tải model Whisper…")
+        self.save_config(silent=True)
+        from config import config as cfg
+
+        if not self._validate_cloud_ready():
+            return
+
+        if cfg.is_streaming_asr():
+            self.status_label.setText("Đang mở Deepgram streaming…")
+        elif cfg.is_batch_cloud_asr():
+            label = "OpenAI" if cfg.asr_backend == "openai" else "Gemini"
+            self.status_label.setText(f"Đang kết nối {label}…")
+        else:
+            self.status_label.setText("Đang tải Whisper…")
         self.status_label.setStyleSheet("font-size: 18px; color: #fab387;")
         self.start_btn.setEnabled(False)
         self.start_btn.setText("Đang tải...")
@@ -605,11 +938,14 @@ class Dashboard(QWidget):
         self.startup_worker.finished.connect(self.on_pipeline_ready)
         self.startup_worker.start()
 
-    def on_pipeline_ready(self, _, pipeline):
+    def on_pipeline_ready(self, error_msg, pipeline):
         from config import config
 
         if not pipeline:
-            self.status_label.setText("Khởi tạo thất bại — xem terminal")
+            msg = error_msg or "Không khởi tạo được pipeline — xem terminal."
+            self.status_label.setText("Khởi tạo thất bại")
+            self.status_label.setStyleSheet("font-size: 18px; color: #f38ba8;")
+            QMessageBox.critical(self, "Không bắt đầu được", msg)
             self._reset_start_buttons()
             return
 
@@ -628,7 +964,14 @@ class Dashboard(QWidget):
 
         self.pipeline.start()
 
-        self.status_label.setText("Đang chạy — nhận giọng")
+        from config import config as cfg
+        if cfg.is_streaming_asr():
+            mode = "Deepgram realtime"
+        elif cfg.is_cloud_asr():
+            mode = "Cloud API"
+        else:
+            mode = "Whisper local"
+        self.status_label.setText(f"Đang chạy — {mode}")
         self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
 
         self.start_btn.hide()
@@ -656,18 +999,60 @@ class Dashboard(QWidget):
 
 
 class StartupWorker(QThread):
-    finished = pyqtSignal(object, object)
+    finished = pyqtSignal(str, object)  # error_msg, pipeline
 
     def run(self):
         try:
+            from config import reload_config
+            reload_config()
             from main import Pipeline
             pipeline = Pipeline()
-            self.finished.emit(None, pipeline)
+            self.finished.emit("", pipeline)
         except Exception as e:
             print(f"Startup Error: {e}")
             import traceback
             traceback.print_exc()
-            self.finished.emit(None, None)
+            self.finished.emit(str(e), None)
+
+
+class CloudTestWorker(QThread):
+    finished = pyqtSignal(bool, str)
+
+    def __init__(
+        self,
+        provider,
+        api_key,
+        openai_base_url=None,
+        openai_model=None,
+        gemini_model=None,
+        deepgram_model=None,
+    ):
+        super().__init__()
+        self.provider = provider
+        self.api_key = api_key
+        self.openai_base_url = openai_base_url
+        self.openai_model = openai_model
+        self.gemini_model = gemini_model
+        self.deepgram_model = deepgram_model
+
+    def run(self):
+        if self.provider == "deepgram":
+            from streaming_asr import test_deepgram_connection
+
+            ok, msg = test_deepgram_connection(
+                self.api_key, model=self.deepgram_model or "nova-3"
+            )
+        else:
+            from cloud_asr import test_cloud_connection
+
+            ok, msg = test_cloud_connection(
+                self.provider,
+                self.api_key,
+                openai_base_url=self.openai_base_url,
+                openai_model=self.openai_model,
+                gemini_model=self.gemini_model,
+            )
+        self.finished.emit(ok, msg)
 
 if __name__ == "__main__":
     def exception_hook(exctype, value, traceback_obj):

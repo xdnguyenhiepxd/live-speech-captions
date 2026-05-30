@@ -12,5 +12,11 @@ fi
 echo "[Khởi động] Kích hoạt môi trường..."
 source .venv/bin/activate
 
-echo "[Khởi động] Chạy ứng dụng (hot reload)..."
-python reloader.py
+if [ "$1" = "--reload" ]; then
+    echo "[Khởi động] Chạy với hot reload (chỉ khi sửa code .py)..."
+    python reloader.py
+else
+    echo "[Khởi động] Chạy ứng dụng..."
+    echo "  (Thêm --reload nếu đang phát triển code)"
+    python launcher.py
+fi

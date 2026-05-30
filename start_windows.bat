@@ -1,5 +1,5 @@
 @echo off
-title Real-Time Translator
+title live-speech-captions
 
 if not exist .venv (
     echo [ERROR] Virtual environment not found.

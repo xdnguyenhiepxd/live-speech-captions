@@ -14,8 +14,8 @@ class RestartHandler(FileSystemEventHandler):
         if event.is_directory:
             return
         
-        # Only react to .py and .ini changes
-        if event.src_path.endswith('.py') or event.src_path.endswith('.ini'):
+        # Chỉ reload khi sửa code .py — KHÔNG theo dõi config.ini (Lưu/API key sẽ kill app)
+        if event.src_path.endswith('.py'):
             # Debounce: avoid double restarts for single save
             if time.time() - self.last_reload > 1.0:
                 print(f"\n[Reloader] Phát hiện thay đổi: {event.src_path}")

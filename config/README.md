@@ -1,35 +1,44 @@
-# Cấu hình
+# Cấu hình — một file cho mỗi loại máy
 
 App chỉ đọc **`config.ini`** ở thư mục gốc.
 
-## macOS
+Mỗi file mẫu gồm **Whisper/MLX (local)**, **Deepgram (realtime)**, **OpenAI/Gemini (batch)**. Đổi engine trong app — không cần copy file khác.
 
-```bash
-# Apple Silicon (M1/M2/M3/M4)
-cp config/mac/macbook-air.ini.example config.ini
+## Chọn file (4 loại)
 
-# Intel — cân bằng (khuyến nghị) | fast | accurate
-cp config/mac/macbook-air-intel.ini.example config.ini
-```
+| Máy | Lệnh copy |
+|-----|-----------|
+| **macOS Intel** (CPU) | `cp config/mac-cpu.ini.example config.ini` |
+| **macOS M1/M2/M3/M4** (GPU/MLX) | `cp config/mac-gpu.ini.example config.ini` |
+| **Windows CPU** | `copy config\windows-cpu.ini.example config.ini` |
+| **Windows GPU NVIDIA** | `copy config\windows-gpu.ini.example config.ini` |
 
-Xem **[INTEL_MAC.md](../INTEL_MAC.md)** (model nhẹ, chỉ tiếng Anh).
+## Engine (`backend`)
 
-## Tham số chính
+| Giá trị | Ý nghĩa |
+|--------|---------|
+| `whisper` | Local — Intel / Windows |
+| `mlx` | Local — chỉ Mac Apple Silicon |
+| `deepgram` | **Realtime** WebSocket — `deepgram_api_key` |
+| `openai` | Cloud batch — `openai_api_key` |
+| `gemini` | Cloud batch — `gemini_api_key` |
 
-| Section | Tham số | Ghi chú |
-|---------|---------|---------|
-| `[transcription]` | `backend` | `mlx` (M-chip) hoặc `whisper` (Intel) |
-| `[transcription]` | `whisper_model` | Tiếng Anh: `small.en`, `base.en`, … |
-| `[transcription]` | `source_language` | `en` nếu chỉ nói tiếng Anh |
-| `[display]` | `reader_font_size` | Cỡ chữ overlay |
-| `[audio]` | `device_index` | `auto` = tự tìm BlackHole |
+Đổi trong app hoặc `[transcription] backend = ...` trong `config.ini`.
 
-YouTube / tiếng hệ thống: cài BlackHole + Multi-Output — **[BLACKHOLE_SETUP.md](../BLACKHOLE_SETUP.md)**.
+## Section trong config.ini
 
-## Cài thư viện
+| Section | Nội dung |
+|---------|----------|
+| `[transcription]` | Engine, model Whisper, CPU/GPU, ngôn ngữ |
+| `[api]` | Key Deepgram / OpenAI / Gemini |
+| `[audio]` | BlackHole/VB-CABLE, VAD, partial |
+| `[display]` | Cỡ chữ overlay |
 
-```bash
-./install_mac.sh
-```
+**Không** commit `config.ini` có API key lên git.
 
-Chỉ cần `requirements.txt` (PyQt6 **6.5.4**, faster-whisper, sounddevice) — **không** cần LLVM, không API key.
+## Âm thanh hệ thống
+
+- macOS: [BLACKHOLE_SETUP.md](../BLACKHOLE_SETUP.md)  
+- Windows: [WINDOWS.md](../WINDOWS.md)  
+- Cloud khi Whisper chậm: [CLOUD_API_HUONG_DAN.md](../CLOUD_API_HUONG_DAN.md)  
+- Intel tối ưu: [INTEL_MAC.md](../INTEL_MAC.md)

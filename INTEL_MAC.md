@@ -6,7 +6,7 @@ Dành cho **Mac Intel** (không có MLX). Mục tiêu: **model nhẹ**, **chỉ 
 
 ```bash
 ./install_mac.sh
-cp config/mac/macbook-air-intel.ini.example config.ini
+cp config/mac-cpu.ini.example config.ini
 ./start_mac.sh
 ```
 
@@ -33,22 +33,15 @@ Với `log_latency = true` (mặc định trên bản Intel):
 
 Nếu **queue &gt; 200ms**: thường do nhiều job cũ — app giờ **chỉ giữ 1 job**, job mới thay job cũ (`[ASR] Bỏ job …`).
 
-## Thử Moonshine Streaming Small
+## Model Whisper (sửa trong `config.ini`)
 
-Xem **[MOONSHINE.md](./MOONSHINE.md)**. **Lưu ý:** trên **macOS 11 + Intel**, `moonshine-voice` thường **không cài được** qua pip (wheel yêu cầu macOS 15+). Dùng Whisper trong app là lựa chọn phù hợp máy này.
+| `whisper_model` | Khi nào |
+|-----------------|--------|
+| **`distil-small.en`** ⭐ | Cân bằng — **mặc định** trong `mac-cpu.ini.example` |
+| `tiny.en` | Rất nhanh — dễ sai / cụt câu |
+| `small.en` | Chính xác hơn — chậm trên CPU |
 
-## Ba chế độ cấu hình
-
-| File | Model | Khi nào dùng |
-|------|-------|----------------|
-| **`macbook-air-intel.ini.example`** ⭐ | `distil-small.en` | Cân bằng — **khuyến nghị** (đủ câu, ít sai từ) |
-| `macbook-air-intel-fast.ini.example` | `tiny.en` | Rất nhanh — dễ **sai / cụt câu** |
-| `macbook-air-intel-accurate.ini.example` | `small.en` | Chính xác nhất — chậm trên CPU |
-
-**Sai từ / không hết câu** thường do bản **fast** (`max_phrase_duration` 2s, `tiny.en`). Dùng bản **cân bằng** ở trên.
-| `base.en` | ~74M | Nhanh | Ổn |
-| `small.en` | ~244M | Chậm trên Air cũ | Cao |
-| `distil-medium.en` | ~394M | Chậm | Cao hơn distil-small |
+Cloud (OpenAI/Gemini): cùng file config — đổi `backend` trong app, xem [CLOUD_API_HUONG_DAN.md](./CLOUD_API_HUONG_DAN.md).
 
 **Distil-Whisper** ([Hugging Face](https://huggingface.co/distil-whisper)): chỉ tiếng Anh, chạy qua **faster-whisper** + **int8**.
 

@@ -1,34 +1,9 @@
-# cp config/mac/macbook-air.ini.example config.ini   (Apple Silicon)
-# cp config/mac/macbook-air-intel.ini.example config.ini   (Intel)
-# YouTube / âm hệ thống: xem BLACKHOLE_SETUP.md
-
-[display]
-reader_font_size = 32
-reader_window_width = 920
-reader_keep_lines = 50
-
-[transcription]
-backend = mlx
-whisper_model = small.en
-device = auto
-compute_type = float16
-source_language = en
-transcription_workers = 1
-
-[audio]
-device_index = auto
-sample_rate = 16000
-silence_threshold = 0.005
-silence_duration = 0.45
-chunk_duration = 0.1
-max_phrase_duration = 6
-streaming_mode = true
-streaming_interval = 3
-streaming_step_size = 0.2
-streaming_overlap = 0.2
-reader_partial_updates = true
-reader_update_interval = 0.85
-partial_window_seconds = 2.5
-min_phrase_duration = 0.8
-standard_cut_duration = 1.0
-soft_cut_at_duration = 3.5
+# Chọn ĐÚNG MỘT file theo máy, copy thành config.ini:
+#
+#   macOS Intel (CPU):     cp config/mac-cpu.ini.example config.ini
+#   macOS Apple Silicon:   cp config/mac-gpu.ini.example config.ini
+#   Windows CPU:           copy config\windows-cpu.ini.example config.ini
+#   Windows GPU NVIDIA:    copy config\windows-gpu.ini.example config.ini
+#
+# Mỗi file đã có Whisper + OpenAI + Gemini. Chỉ đổi «backend» trong app.
+# YouTube: BLACKHOLE_SETUP.md (Mac) | WINDOWS.md (Win)

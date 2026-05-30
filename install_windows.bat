@@ -1,8 +1,8 @@
 @echo off
-title Real-Time Translator Installer
+title live-speech-captions Installer
 
 echo ===================================================
-echo   Real-Time Translator - Windows Installer
+echo   live-speech-captions - Windows Installer
 echo ===================================================
 
 :: Check for Python
@@ -64,7 +64,13 @@ if %errorlevel% neq 0 (
 
 echo.
 echo ===================================================
-echo   Installation Complete! 
+echo   Installation Complete!
+echo.
+echo   Config (Whisper + OpenAI + Gemini):
+echo     CPU:  copy config\windows-cpu.ini.example config.ini
+echo     GPU:  copy config\windows-gpu.ini.example config.ini
+echo.
+echo   See WINDOWS.md for VB-CABLE and CUDA setup.
 echo   Run 'start_windows.bat' to launch the app.
 echo ===================================================
 pause

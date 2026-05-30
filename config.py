@@ -17,15 +17,40 @@ class Config:
         else:
             print(f"[Config] Warning: {config_path} not found, using defaults/env vars")
         
-        # API settings (env vars take precedence)
-        self.api_base_url = os.getenv("OPENAI_BASE_URL") or self._get("api", "base_url") or None
-        self.api_key = os.getenv("OPENAI_API_KEY") or self._get("api", "api_key", "dummy-key-for-local")
-        
-        # Translation settings
-        self.model = self._get("translation", "model", "gpt-3.5-turbo")
-        self.model = self._get("translation", "model", "gpt-3.5-turbo")
-        self.target_lang = self._get("translation", "target_lang", "Chinese")
-        self.translation_threads = self._getint("translation", "threads", 4)
+        # Cloud STT API (OpenAI / Gemini) — khi Whisper local quá chậm
+        self.openai_api_key = (
+            os.getenv("OPENAI_API_KEY")
+            or self._get("api", "openai_api_key")
+            or self._get("api", "api_key", "")
+        )
+        self.openai_base_url = (
+            os.getenv("OPENAI_BASE_URL")
+            or self._get("api", "openai_base_url")
+            or self._get("api", "base_url", "")
+        ) or None
+        self.openai_stt_model = self._get(
+            "api", "openai_stt_model", "gpt-4o-mini-transcribe"
+        )
+        self.gemini_api_key = (
+            os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or self._get("api", "gemini_api_key", "")
+        )
+        self.gemini_model = self._get("api", "gemini_model", "gemini-2.5-flash")
+        self.deepgram_api_key = (
+            os.getenv("DEEPGRAM_API_KEY")
+            or self._get("api", "deepgram_api_key", "")
+        )
+        self.deepgram_model = self._get("api", "deepgram_model", "nova-3")
+        self.deepgram_language = self._get("api", "deepgram_language", "en")
+        self.realtime_mode = (
+            self._get("transcription", "realtime_mode", "true").lower() == "true"
+        )
+        self.cloud_partial = self._get("transcription", "cloud_partial", "false").lower() == "true"
+        # Free Gemini ≈ 5 RPM → tối thiểu ~13s giữa 2 lần gọi API
+        self.cloud_min_request_interval = self._getfloat(
+            "transcription", "cloud_min_request_interval", 13.0
+        )
         
         # Transcription settings
         self.asr_backend = self._get("transcription", "backend", "whisper").lower()
@@ -52,12 +77,12 @@ class Config:
         self.silence_duration = self._getfloat("audio", "silence_duration", 1.0)
         self.chunk_duration = self._getfloat("audio", "chunk_duration", 0.5)
         
-        # Device index: 'auto' or empty = auto-detect BlackHole, or set a specific index
+        # Device index: 'auto' = BlackHole (macOS) / VB-CABLE (Windows), or numeric index
         device_idx_str = self._get("audio", "device_index", "auto")
         if device_idx_str.isdigit():
             self.device_index = int(device_idx_str)
         elif device_idx_str.lower() in ("auto", ""):
-            self.device_index = self._find_blackhole_device()
+            self.device_index = self._find_virtual_input_device()
         else:
             self.device_index = None
             
@@ -107,28 +132,66 @@ class Config:
         except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
             return fallback
     
-    def _find_blackhole_device(self):
-        """Auto-detect BlackHole audio device index"""
+    def _find_virtual_input_device(self):
+        """Auto-detect virtual loopback input (BlackHole, VB-CABLE, …)."""
+        keywords = (
+            "blackhole",
+            "vb-audio",
+            "vb audio",
+            "cable output",
+            "voicemeeter",
+            "virtual cable",
+        )
         try:
             import sounddevice as sd
             devices = sd.query_devices()
             for i, d in enumerate(devices):
-                if d['max_input_channels'] > 0 and 'blackhole' in d['name'].lower():
-                    print(f"[Config] Auto-detected BlackHole device: [{i}] {d['name']}")
+                if d["max_input_channels"] <= 0:
+                    continue
+                name = d["name"].lower()
+                if any(k in name for k in keywords):
+                    print(f"[Config] Auto-detected capture device: [{i}] {d['name']}")
                     return i
-            print("[Config] BlackHole not found, using default input device")
+            print("[Config] No virtual capture device found, using default input")
             return None
         except Exception as e:
             print(f"[Config] Error detecting audio devices: {e}")
             return None
     
+    def is_streaming_asr(self):
+        return self.asr_backend == "deepgram"
+
+    def is_cloud_asr(self):
+        return self.asr_backend in ("openai", "gemini", "deepgram")
+
+    def is_batch_cloud_asr(self):
+        return self.asr_backend in ("openai", "gemini")
+
     def print_config(self):
         """Print current configuration for debugging"""
         print("[Config] Current settings:")
-        print(f"  API Base URL: {self.api_base_url or '(default OpenAI)'}")
-        print(f"  API Key: {self.api_key[:8]}...{self.api_key[-4:] if len(self.api_key) > 12 else '***'}")
-        print(f"  Model: {self.model}")
-        print(f"  Target Language: {self.target_lang}")
+        if self.is_cloud_asr():
+            if self.is_streaming_asr():
+                masked = self._mask_key(self.deepgram_api_key)
+                print(f"  Streaming ASR: deepgram | key={masked} | model={self.deepgram_model}")
+            else:
+                key = (
+                    self.openai_api_key
+                    if self.asr_backend == "openai"
+                    else self.gemini_api_key
+                )
+                masked = self._mask_key(key)
+                print(f"  Cloud ASR: {self.asr_backend} | key={masked}")
+                if self.asr_backend == "openai":
+                    print(f"  OpenAI STT model: {self.openai_stt_model}")
+                else:
+                    print(f"  Gemini model: {self.gemini_model}")
+                print(
+                    f"  Cloud min interval: {self.cloud_min_request_interval}s "
+                    f"(tránh 429 RPM)"
+                )
+        if self.realtime_mode:
+            print("  Realtime mode: ON")
         print(f"  ASR Backend: {self.asr_backend}")
         print(f"  Whisper Model: {self.whisper_model}")
         print(
@@ -140,5 +203,21 @@ class Config:
         print(f"  Partial updates: {self.partial_updates}")
         print(f"  Max phrase: {self.max_phrase_duration}s")
 
+    @staticmethod
+    def _mask_key(key: str) -> str:
+        key = (key or "").strip()
+        if not key:
+            return "(chưa có)"
+        if len(key) <= 8:
+            return "***"
+        return f"{key[:4]}…{key[-4:]}"
+
 # Global config instance
 config = Config()
+
+
+def reload_config(config_path=None):
+    """Reload config.ini (sau khi lưu từ Dashboard)."""
+    global config
+    config = Config(config_path)
+    return config
