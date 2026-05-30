@@ -33,12 +33,15 @@ Với `log_latency = true` (mặc định trên bản Intel):
 
 Nếu **queue &gt; 200ms**: thường do nhiều job cũ — app giờ **chỉ giữ 1 job**, job mới thay job cũ (`[ASR] Bỏ job …`).
 
-## Model khuyến nghị
+## Ba chế độ cấu hình
 
-| `whisper_model` | Kích thước | Tốc độ (Intel) | Độ chính xác EN |
-|-----------------|----------|----------------|-----------------|
-| **`tiny.en`** ⭐ (mặc định) | ~39M | Nhanh nhất | Đủ YouTube / họp EN |
-| `distil-small.en` | ~166M | Chậm hơn ~3–5× | Tốt hơn tiny |
+| File | Model | Khi nào dùng |
+|------|-------|----------------|
+| **`macbook-air-intel.ini.example`** ⭐ | `distil-small.en` | Cân bằng — **khuyến nghị** (đủ câu, ít sai từ) |
+| `macbook-air-intel-fast.ini.example` | `tiny.en` | Rất nhanh — dễ **sai / cụt câu** |
+| `macbook-air-intel-accurate.ini.example` | `small.en` | Chính xác nhất — chậm trên CPU |
+
+**Sai từ / không hết câu** thường do bản **fast** (`max_phrase_duration` 2s, `tiny.en`). Dùng bản **cân bằng** ở trên.
 | `base.en` | ~74M | Nhanh | Ổn |
 | `small.en` | ~244M | Chậm trên Air cũ | Cao |
 | `distil-medium.en` | ~394M | Chậm | Cao hơn distil-small |
@@ -57,20 +60,12 @@ rm -rf ~/.cache/huggingface/hub/models--distil-whisper--distil-small.en
 ## Tham số `config.ini` quan trọng
 
 ```ini
-[transcription]
-whisper_model = tiny.en
-vad_filter = false
-max_transcribe_seconds = 3.0
-log_latency = true
-cpu_threads = 4
-
-[audio]
-max_phrase_duration = 3.0
-reader_partial_updates = false
-standard_cut_duration = 0.75
+whisper_model = distil-small.en
+max_transcribe_seconds = 8.0
+max_phrase_duration = 6.0
+silence_duration = 0.55
+use_context_prompt = true
 ```
-
-Bản **chính xác hơn**: `macbook-air-intel-accurate.ini.example` (`distil-small.en`).
 
 - **`beam_size = 1`**: nhanh nhất, đủ cho phụ đề live.
 - **`cpu_threads`**: 2–4 tùy số nhân (Air 2018 thường 2–4 nhân logic).

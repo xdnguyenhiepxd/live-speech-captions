@@ -1,5 +1,8 @@
-# MacBook Air Intel — tốc độ tối đa (tiny.en, queue 1 job, âm ngắn)
+# MacBook Air Intel — CÂN BẰNG (chính xác + đủ câu). Mặc định khuyến nghị.
 #   cp config/mac/macbook-air-intel.ini.example config.ini
+#
+# Chỉ cần tốc độ tối đa (dễ sai từ / cắt cụt): macbook-air-intel-fast.ini.example
+# Chính xác cao hơn (chậm): macbook-air-intel-accurate.ini.example
 
 [display]
 reader_font_size = 32
@@ -8,26 +11,28 @@ reader_keep_lines = 50
 
 [transcription]
 backend = whisper
-whisper_model = tiny.en
+whisper_model = distil-small.en
 device = cpu
 compute_type = int8
 source_language = en
 beam_size = 1
-cpu_threads = 2
+cpu_threads = 4
 vad_filter = false
-max_transcribe_seconds = 2.0
+max_transcribe_seconds = 8.0
 log_latency = true
-use_context_prompt = false
+use_context_prompt = true
 
 [audio]
 device_index = auto
 sample_rate = 16000
 silence_threshold = 0.005
-silence_duration = 0.3
+silence_duration = 0.55
 chunk_duration = 0.1
 streaming_step_size = 0.2
-max_phrase_duration = 2.2
-reader_partial_updates = false
-min_phrase_duration = 0.45
-standard_cut_duration = 0.6
-soft_cut_at_duration = 1.8
+max_phrase_duration = 6.0
+reader_partial_updates = true
+reader_update_interval = 1.0
+partial_window_seconds = 2.5
+min_phrase_duration = 0.8
+standard_cut_duration = 1.0
+soft_cut_at_duration = 4.5

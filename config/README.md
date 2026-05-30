@@ -8,7 +8,7 @@ App chỉ đọc **`config.ini`** ở thư mục gốc.
 # Apple Silicon (M1/M2/M3/M4)
 cp config/mac/macbook-air.ini.example config.ini
 
-# Intel Mac — nhanh: tiny.en | chính xác hơn: macbook-air-intel-accurate.ini.example
+# Intel — cân bằng (khuyến nghị) | fast | accurate
 cp config/mac/macbook-air-intel.ini.example config.ini
 ```
 

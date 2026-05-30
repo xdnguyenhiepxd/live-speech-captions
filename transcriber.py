@@ -421,7 +421,11 @@ class Transcriber:
         sr = self.sample_rate
         if latency_meta and "sample_rate" in latency_meta:
             sr = latency_meta["sample_rate"]
-        max_samples = int(self.max_transcribe_seconds * sr)
+        kind = (latency_meta or {}).get("kind", "final")
+        max_sec = self.max_transcribe_seconds
+        if kind == "partial":
+            max_sec = min(max_sec, 3.0)
+        max_samples = int(max_sec * sr)
         if len(audio) > max_samples:
             audio = audio[-max_samples:]
 
@@ -662,13 +666,16 @@ class Transcriber:
             best_of=1,
             temperature=0.0,
             condition_on_previous_text=False,
-            no_speech_threshold=0.6,
+            no_speech_threshold=0.45,
+            log_prob_threshold=-0.7,
+            compression_ratio_threshold=2.2,
             vad_filter=self.vad_filter,
             without_timestamps=True,
             word_timestamps=False,
         )
         if prompt and self.use_context_prompt:
-            kwargs["initial_prompt"] = prompt
+            tail = prompt.strip()[-200:]
+            kwargs["initial_prompt"] = tail
         segments, _ = self.model.transcribe(audio_data, **kwargs)
         text = " ".join(segment.text for segment in segments).strip()
         return text

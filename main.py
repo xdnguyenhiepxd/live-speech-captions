@@ -109,15 +109,16 @@ class Pipeline(QObject):
         kind = job["kind"]
         chunk_id = job["chunk_id"]
         t_captured = job["t_captured"]
+        prompt = job.get("prompt")
+        if kind == "final" and config.use_context_prompt:
+            prompt = self.last_final_text
         meta = {
             "chunk_id": chunk_id,
             "kind": kind,
             "t_captured": t_captured,
             "sample_rate": self.audio.sample_rate,
         }
-        text = self.transcriber.transcribe(
-            job["audio"], prompt=job.get("prompt"), latency_meta=meta
-        )
+        text = self.transcriber.transcribe(job["audio"], prompt=prompt, latency_meta=meta)
         if text:
             if kind == "final" and len(text.split()) > 2:
                 self.last_final_text = text
