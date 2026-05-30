@@ -27,7 +27,16 @@ pip install PyQt6==6.5.4 PyQt6-sip==13.6.0 PyQt6-Qt6==6.5.3
 | `small.en` | ~244M | Chậm trên Air cũ | Cao |
 | `distil-medium.en` | ~394M | Chậm | Cao hơn distil-small |
 
-**Distil-Whisper** ([Hugging Face](https://huggingface.co/distil-whisper)): chỉ tiếng Anh, distill từ Whisper, chạy qua **faster-whisper** + **int8**.
+**Distil-Whisper** ([Hugging Face](https://huggingface.co/distil-whisper)): chỉ tiếng Anh, chạy qua **faster-whisper** + **int8**.
+
+Trong `config.ini` dùng **`distil-small.en`** (tên ngắn). **Không** dùng `distil-whisper/distil-small.en` — đó là bản PyTorch, sẽ lỗi `Unable to open file 'model.bin'`.
+
+Nếu đã lỗi cache:
+
+```bash
+rm -rf ~/.cache/huggingface/hub/models--distil-whisper--distil-small.en
+./start_mac.sh
+```
 
 ## Tham số `config.ini` quan trọng
 

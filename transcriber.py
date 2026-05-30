@@ -1,16 +1,21 @@
 import os
 import numpy as np
 
-# Tiếng Anh — map tên ngắn trong config.ini → repo Hugging Face (faster-whisper)
-WHISPER_MODEL_ALIASES = {
-    "distil-small.en": "distil-whisper/distil-small.en",
-    "distil-medium.en": "distil-whisper/distil-medium.en",
-    "distil-large-v3": "distil-whisper/distil-large-v3",
-}
-
-
 def resolve_whisper_model_id(model_size: str) -> str:
-    return WHISPER_MODEL_ALIASES.get(model_size.strip(), model_size.strip())
+    """
+  faster-whisper cần bản CTranslate2 (có model.bin), tải qua tên ngắn → Systran/*.
+
+  KHÔNG dùng distil-whisper/distil-small.en (PyTorch) — sẽ lỗi «Unable to open model.bin».
+  """
+    key = model_size.strip()
+    if key.startswith("distil-whisper/"):
+        short = key.split("/", 1)[-1]
+        print(
+            f"[Transcriber] Cảnh báo: '{key}' là bản Transformers. "
+            f"Dùng '{short}' trong config.ini (bản CTranslate2)."
+        )
+        return short
+    return key
 
 
 class Transcriber:
@@ -58,16 +63,26 @@ class Transcriber:
         from faster_whisper import WhisperModel
 
         model_id = resolve_whisper_model_id(model_size)
-        self._is_distil = "distil" in model_id.lower()
+        self._is_distil = model_id.lower().startswith("distil")
         if device == "auto":
             device = "cpu"
 
-        self.model = WhisperModel(
-            model_id,
-            device=device,
-            compute_type=compute_type,
-            cpu_threads=self.cpu_threads,
-        )
+        try:
+            self.model = WhisperModel(
+                model_id,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=self.cpu_threads,
+            )
+        except RuntimeError as e:
+            if "model.bin" in str(e):
+                raise RuntimeError(
+                    f"Không load được model '{model_id}' (thiếu model.bin CTranslate2).\n"
+                    f"  • Giữ whisper_model = distil-small.en (không prefix distil-whisper/)\n"
+                    f"  • Xóa cache lỗi: rm -rf ~/.cache/huggingface/hub/models--distil-whisper--distil-small.en\n"
+                    f"  • Chạy lại app để tải bản Systran/faster-distil-whisper-small.en"
+                ) from e
+            raise
         label = "Distil-Whisper EN" if self._is_distil else "faster-whisper"
         print(
             f"[Transcriber] {label}: {model_id} | device={device} | "
