@@ -1,0 +1,5 @@
+# Thử Moonshine streaming (tách khỏi requirements.txt chính)
+#   pip install -r requirements-moonshine.txt
+moonshine-voice
+numpy
+sounddevice

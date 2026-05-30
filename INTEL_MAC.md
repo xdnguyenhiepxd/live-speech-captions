@@ -33,6 +33,10 @@ Với `log_latency = true` (mặc định trên bản Intel):
 
 Nếu **queue &gt; 200ms**: thường do nhiều job cũ — app giờ **chỉ giữ 1 job**, job mới thay job cũ (`[ASR] Bỏ job …`).
 
+## Thử Moonshine Streaming Small
+
+Model khác (streaming native, CPU): xem **[MOONSHINE.md](./MOONSHINE.md)** và `python test_moonshine_streaming.py`. Chưa gắn vào Dashboard — chỉ thử độc lập trước.
+
 ## Ba chế độ cấu hình
 
 | File | Model | Khi nào dùng |
