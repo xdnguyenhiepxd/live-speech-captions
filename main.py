@@ -42,6 +42,16 @@ class Pipeline(QObject):
                 "backend=funasr không còn hỗ trợ. Đặt backend = mlx (M-chip) hoặc whisper (Intel)."
             )
 
+        import platform
+        if platform.system() == "Darwin" and platform.machine() != "arm64":
+            if config.asr_backend == "mlx":
+                raise ValueError(
+                    "Mac Intel không hỗ trợ backend=mlx. "
+                    "cp config/mac/macbook-air-intel.ini.example config.ini"
+                )
+            if config.whisper_device in ("mps", "auto"):
+                print("[Pipeline] Mac Intel → dùng device=cpu trong config.ini")
+
         print(
             f"[Pipeline] ASR backend={config.asr_backend}, model={config.whisper_model}, "
             f"lang={config.source_language}"
@@ -52,6 +62,8 @@ class Pipeline(QObject):
             device=config.whisper_device,
             compute_type=config.whisper_compute_type,
             language=config.source_language,
+            beam_size=config.whisper_beam_size,
+            cpu_threads=config.cpu_threads,
         )
 
         self.partial_updates = config.reader_partial_updates

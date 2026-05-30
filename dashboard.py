@@ -506,10 +506,19 @@ class Dashboard(QWidget):
         layout.addRow("Engine ASR:", self.asr_backend)
 
         self.whisper_model = QComboBox()
-        self.whisper_model.addItems(
-            ["tiny.en", "base.en", "small.en", "medium.en", "tiny", "base", "small", "medium", "large-v3"]
-        )
+        self.whisper_model.addItems([
+            "distil-small.en",
+            "distil-medium.en",
+            "tiny.en",
+            "base.en",
+            "small.en",
+            "medium.en",
+            "distil-large-v3",
+        ])
         self.whisper_model.setCurrentText(config.whisper_model)
+        self.whisper_model.setToolTip(
+            "Intel Mac: distil-small.en (nhẹ + chính xác EN). M-chip: dùng mlx + small.en"
+        )
         layout.addRow("Model Whisper:", self.whisper_model)
         
         self.device_type = QComboBox()
@@ -580,7 +589,7 @@ class Dashboard(QWidget):
         cp.set("transcription", "device", self.device_type.currentText())
         cp.set("transcription", "compute_type", self.compute_type.currentText())
         cp.set("transcription", "source_language", self.source_language.currentText())
-        
+
         with open(config_path, 'w') as f:
             cp.write(f)
             

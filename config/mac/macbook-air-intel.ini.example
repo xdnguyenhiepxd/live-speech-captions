@@ -1,5 +1,9 @@
-# Intel Mac (2018–2020), macOS 11+ — Whisper CPU, không MLX
+# MacBook Air Intel (2018–2020) — tiếng Anh, CPU, model nhẹ + chính xác
 #   cp config/mac/macbook-air-intel.ini.example config.ini
+#
+# Model mặc định: distil-small.en (~166M, chỉ EN, ~6× nhanh hơn Whisper gốc)
+# Nếu máy vẫn chậm: đổi whisper_model = tiny.en
+# Nếu cần chính xác hơn (chậm hơn): distil-medium.en hoặc small.en
 
 [display]
 reader_font_size = 32
@@ -8,23 +12,27 @@ reader_keep_lines = 50
 
 [transcription]
 backend = whisper
-whisper_model = base.en
+whisper_model = distil-small.en
 device = cpu
 compute_type = int8
 source_language = en
 transcription_workers = 1
+beam_size = 1
+cpu_threads = 2
 
 [audio]
 device_index = auto
 sample_rate = 16000
 silence_threshold = 0.005
-silence_duration = 0.45
-max_phrase_duration = 6
+silence_duration = 0.5
+chunk_duration = 0.1
+max_phrase_duration = 7
 streaming_mode = true
 streaming_step_size = 0.2
-reader_partial_updates = true
-reader_update_interval = 1.0
-partial_window_seconds = 2.5
-min_phrase_duration = 0.8
-standard_cut_duration = 1.0
-soft_cut_at_duration = 3.5
+# Tắt partial = ít gọi model hơn → mượt trên CPU Intel
+reader_partial_updates = false
+reader_update_interval = 1.2
+partial_window_seconds = 2.0
+min_phrase_duration = 0.9
+standard_cut_duration = 1.1
+soft_cut_at_duration = 4.0

@@ -37,6 +37,8 @@ class Config:
         if self.source_language == "auto":
             self.source_language = None  # Whisper uses None for auto-detect
         self.transcription_workers = self._getint("transcription", "transcription_workers", 2)
+        self.whisper_beam_size = self._getint("transcription", "beam_size", 1)
+        self.cpu_threads = self._getint("transcription", "cpu_threads", 0)
         
         # Audio settings
         self.sample_rate = self._getint("audio", "sample_rate", 16000)
@@ -123,7 +125,7 @@ class Config:
         print(f"  Target Language: {self.target_lang}")
         print(f"  ASR Backend: {self.asr_backend}")
         print(f"  Whisper Model: {self.whisper_model}")
-        print(f"  FunASR Model: {self.funasr_model}")
+        print(f"  Beam / CPU threads: {self.whisper_beam_size} / {self.cpu_threads or 'auto'}")
         print(f"  Sample Rate: {self.sample_rate}")
         print(f"  Partial updates: {self.partial_updates}")
         print(f"  Max phrase: {self.max_phrase_duration}s")

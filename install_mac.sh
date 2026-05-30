@@ -26,7 +26,9 @@ ARCH=$(uname -m)
 if [ "$ARCH" = "arm64" ]; then
     echo "  → Apple Silicon: dùng backend=mlx trong config.ini"
 else
-    echo "  → Intel Mac: dùng backend=whisper, device=cpu trong config.ini"
+    echo "  → Intel Mac:"
+    echo "     cp config/mac/macbook-air-intel.ini.example config.ini"
+    echo "     (model distil-small.en — xem INTEL_MAC.md)"
 fi
 
 echo "[3/3] Kiểm tra ffmpeg / BlackHole..."

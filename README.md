@@ -31,7 +31,9 @@ Bấm **▶ Bắt đầu** trên bảng điều khiển.
 | Máy | `config.ini` | `backend` |
 |-----|--------------|-----------|
 | Mac M1/M2/M3/M4 | `config/mac/macbook-air.ini.example` | `mlx` |
-| Mac Intel 2018+ | `config/mac/macbook-air-intel.ini.example` | `whisper` |
+| Mac Intel 2018+ | `config/mac/macbook-air-intel.ini.example` | `whisper` + **`distil-small.en`** |
+
+Chi tiết tối ưu Intel: **[INTEL_MAC.md](./INTEL_MAC.md)**
 
 ```ini
 [transcription]

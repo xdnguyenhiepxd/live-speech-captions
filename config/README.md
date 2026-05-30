@@ -8,9 +8,11 @@ App chỉ đọc **`config.ini`** ở thư mục gốc.
 # Apple Silicon (M1/M2/M3/M4)
 cp config/mac/macbook-air.ini.example config.ini
 
-# Intel Mac (2018–2020)
+# Intel Mac (2018–2020) — distil-small.en, CPU int8
 cp config/mac/macbook-air-intel.ini.example config.ini
 ```
+
+Xem **[INTEL_MAC.md](../INTEL_MAC.md)** (model nhẹ, chỉ tiếng Anh).
 
 ## Tham số chính
 

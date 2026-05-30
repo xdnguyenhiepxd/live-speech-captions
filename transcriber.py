@@ -1,7 +1,29 @@
+import os
 import numpy as np
 
+# Tiếng Anh — map tên ngắn trong config.ini → repo Hugging Face (faster-whisper)
+WHISPER_MODEL_ALIASES = {
+    "distil-small.en": "distil-whisper/distil-small.en",
+    "distil-medium.en": "distil-whisper/distil-medium.en",
+    "distil-large-v3": "distil-whisper/distil-large-v3",
+}
+
+
+def resolve_whisper_model_id(model_size: str) -> str:
+    return WHISPER_MODEL_ALIASES.get(model_size.strip(), model_size.strip())
+
+
 class Transcriber:
-    def __init__(self, backend="whisper", model_size="base", device="cpu", compute_type="int8", language=None):
+    def __init__(
+        self,
+        backend="whisper",
+        model_size="base",
+        device="cpu",
+        compute_type="int8",
+        language=None,
+        beam_size=1,
+        cpu_threads=0,
+    ):
         """
         Initialize Transcriber with multiple backend support
         
@@ -17,8 +39,13 @@ class Transcriber:
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
+        self.beam_size = max(1, int(beam_size))
+        self.cpu_threads = cpu_threads if cpu_threads and cpu_threads > 0 else max(
+            1, (os.cpu_count() or 4) - 1
+        )
         self.model = None
-        
+        self._is_distil = False
+
         if self.backend == "funasr":
             self._init_funasr(model_size, device)
         elif self.backend == "mlx":
@@ -27,10 +54,25 @@ class Transcriber:
             self._init_whisper(model_size, device, compute_type)
 
     def _init_whisper(self, model_size, device, compute_type):
-        """Initialize faster-whisper backend"""
+        """Initialize faster-whisper backend (Intel Mac / Windows CPU)"""
         from faster_whisper import WhisperModel
-        self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
-        print(f"[Transcriber] Using faster-whisper (CPU/CUDA) with model: {model_size}")
+
+        model_id = resolve_whisper_model_id(model_size)
+        self._is_distil = "distil" in model_id.lower()
+        if device == "auto":
+            device = "cpu"
+
+        self.model = WhisperModel(
+            model_id,
+            device=device,
+            compute_type=compute_type,
+            cpu_threads=self.cpu_threads,
+        )
+        label = "Distil-Whisper EN" if self._is_distil else "faster-whisper"
+        print(
+            f"[Transcriber] {label}: {model_id} | device={device} | "
+            f"{compute_type} | cpu_threads={self.cpu_threads} | beam={self.beam_size}"
+        )
     
     def _init_mlx(self, model_size):
         try:
@@ -564,13 +606,16 @@ class Transcriber:
                 return ""
 
     def _transcribe_faster_whisper(self, audio_data, prompt=None):
+        lang = self.language or ("en" if self._is_distil else None)
         segments, _ = self.model.transcribe(
-            audio_data, 
-            language=self.language, 
-            beam_size=1,
-            condition_on_previous_text=False, # We manage context manually if needed
+            audio_data,
+            language=lang,
+            beam_size=self.beam_size,
+            condition_on_previous_text=False,
             initial_prompt=prompt,
-            no_speech_threshold=0.6
+            no_speech_threshold=0.6,
+            vad_filter=True,
+            without_timestamps=True,
         )
-        text = " ".join([segment.text for segment in segments]).strip()
+        text = " ".join(segment.text for segment in segments).strip()
         return text
