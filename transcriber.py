@@ -32,6 +32,7 @@ class Transcriber:
         max_transcribe_seconds=4.0,
         log_latency=True,
         sample_rate=16000,
+        use_context_prompt=False,
     ):
         """
         Initialize Transcriber with multiple backend support
@@ -58,6 +59,7 @@ class Transcriber:
         self.max_transcribe_seconds = max(1.0, float(max_transcribe_seconds))
         self.log_latency = log_latency
         self.sample_rate = sample_rate
+        self.use_context_prompt = use_context_prompt
 
         if self.backend == "funasr":
             self._init_funasr(model_size, device)
@@ -665,7 +667,7 @@ class Transcriber:
             without_timestamps=True,
             word_timestamps=False,
         )
-        if prompt:
+        if prompt and self.use_context_prompt:
             kwargs["initial_prompt"] = prompt
         segments, _ = self.model.transcribe(audio_data, **kwargs)
         text = " ".join(segment.text for segment in segments).strip()

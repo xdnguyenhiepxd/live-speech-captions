@@ -1,26 +1,30 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 import sys
 import signal
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 
 from audio_capture import AudioCapture
 from transcriber import Transcriber
 from config import config
+from asr_queue import AsrQueue
 
 class WorkerSignals(QObject):
-    update_text = pyqtSignal(int, str, str)  # (chunk_id, original, unused)
+    update_text = pyqtSignal(int, str, str)
 
 class Pipeline(QObject):
     def __init__(self):
         super().__init__()
         self.signals = WorkerSignals()
         self.running = True
+        self.last_final_text = ""
+        self._chunk_buffers = []
 
         config.print_config()
 
@@ -38,23 +42,18 @@ class Pipeline(QObject):
         )
 
         if config.asr_backend == "funasr":
-            raise ValueError(
-                "backend=funasr không còn hỗ trợ. Đặt backend = mlx (M-chip) hoặc whisper (Intel)."
-            )
+            raise ValueError("backend=funasr không còn hỗ trợ.")
 
         import platform
         if platform.system() == "Darwin" and platform.machine() != "arm64":
             if config.asr_backend == "mlx":
                 raise ValueError(
-                    "Mac Intel không hỗ trợ backend=mlx. "
-                    "cp config/mac/macbook-air-intel.ini.example config.ini"
+                    "Mac Intel: cp config/mac/macbook-air-intel.ini.example config.ini"
                 )
-            if config.whisper_device in ("mps", "auto"):
-                print("[Pipeline] Mac Intel → dùng device=cpu trong config.ini")
 
         print(
-            f"[Pipeline] ASR backend={config.asr_backend}, model={config.whisper_model}, "
-            f"lang={config.source_language}"
+            f"[Pipeline] ASR={config.asr_backend} model={config.whisper_model} "
+            f"max_audio={config.max_transcribe_seconds}s"
         )
         self.transcriber = Transcriber(
             backend=config.asr_backend,
@@ -68,6 +67,7 @@ class Pipeline(QObject):
             max_transcribe_seconds=config.max_transcribe_seconds,
             log_latency=config.log_latency,
             sample_rate=config.sample_rate,
+            use_context_prompt=config.use_context_prompt,
         )
 
         self.partial_updates = config.reader_partial_updates
@@ -76,139 +76,52 @@ class Pipeline(QObject):
         self.soft_cut_at_duration = config.soft_cut_at_duration
         self.update_interval = config.reader_update_interval
         self.partial_window_seconds = config.partial_window_seconds
-        self._asr_busy = False
-        self._pending_partial = None
-        print(
-            f"[Pipeline] partial={self.partial_updates}, interval={self.update_interval}s, "
-            f"window={self.partial_window_seconds}s"
-        )
 
+        self._asr_queue = AsrQueue(self._handle_asr_job)
         self.transcriber.warmup()
+        print("[Pipeline] ASR queue: 1 slot (job mới thay job cũ — không xếp hàng dài)")
 
     def start(self):
-        self.thread = threading.Thread(target=self.processing_loop)
-        self.thread.daemon = True
+        self.thread = threading.Thread(target=self.processing_loop, daemon=True)
         self.thread.start()
 
     def stop(self):
         print("\n[Pipeline] Stopping...")
         self.running = False
         self.audio.stop()
+        if hasattr(self, "_asr_queue"):
+            self._asr_queue.stop()
         if self.thread.is_alive():
             self.thread.join(timeout=2)
         print("[Pipeline] Stopped.")
 
-    def processing_loop(self):
-        import numpy as np
+    def _submit_asr(self, kind, audio_data, chunk_id, prompt, t_captured):
+        self._asr_queue.submit({
+            "kind": kind,
+            "audio": audio_data,
+            "chunk_id": chunk_id,
+            "prompt": prompt if config.use_context_prompt else None,
+            "t_captured": t_captured,
+            "log_drop": config.log_latency,
+        })
 
-        print("[Pipeline] processing loop started.")
-        is_mlx = config.asr_backend == "mlx"
-        num_workers = 1 if is_mlx else config.transcription_workers
-
-        transcribe_executor = ThreadPoolExecutor(max_workers=1)
-        self._transcribe_executor = transcribe_executor
-
-        buffer = np.array([], dtype=np.float32)
-        chunk_id = 1
-        last_update_time = time.time()
-        self.last_final_text = ""
-        audio_gen = self.audio.generator()
-
-        try:
-            for audio_chunk in audio_gen:
-                if not self.running:
-                    break
-                buffer = np.concatenate([buffer, audio_chunk])
-                now = time.time()
-                buffer_duration = len(buffer) / self.audio.sample_rate
-
-                is_silence = False
-                min_silence_dur = config.silence_duration
-                if buffer_duration > min_silence_dur:
-                    tail = buffer[-int(self.audio.sample_rate * min_silence_dur):]
-                    rms = np.sqrt(np.mean(tail**2))
-                    if rms < self.audio.silence_threshold:
-                        is_silence = True
-
-                standard_cut = is_silence and buffer_duration >= self.standard_cut_duration
-                soft_limit_cut = False
-                if buffer_duration >= self.soft_cut_at_duration:
-                    short_tail_samps = int(self.audio.sample_rate * 0.4)
-                    if len(buffer) > short_tail_samps:
-                        t_rms = np.sqrt(np.mean(buffer[-short_tail_samps:]**2))
-                        if t_rms < self.audio.silence_threshold:
-                            soft_limit_cut = True
-
-                hard_limit_cut = buffer_duration > self.audio.max_phrase_duration
-                should_finalize = standard_cut or soft_limit_cut or hard_limit_cut
-
-                if should_finalize and buffer_duration >= self.min_phrase_duration:
-                    final_buffer = buffer.copy()
-                    cid = chunk_id
-                    prompt = self.last_final_text
-                    overall_rms = np.sqrt(np.mean(final_buffer**2))
-                    if overall_rms >= self.audio.silence_threshold:
-                        t_cap = time.perf_counter()
-                        dur = len(final_buffer) / self.audio.sample_rate
-                        if config.log_latency:
-                            print(
-                                f"[AUDIO] chunk={cid} final | {dur:.2f}s audio | "
-                                f"→ gửi ASR @ {time.strftime('%H:%M:%S')}"
-                            )
-                        transcribe_executor.submit(
-                            self._process_final_chunk, final_buffer, cid, prompt, t_cap
-                        )
-                    buffer = np.array([], dtype=np.float32)
-                    chunk_id += 1
-                    last_update_time = now
-
-                elif (
-                    self.partial_updates
-                    and now - last_update_time > self.update_interval
-                    and buffer_duration >= self.min_phrase_duration
-                ):
-                    tail_samps = int(self.audio.sample_rate * self.partial_window_seconds)
-                    partial_buffer = (
-                        buffer[-tail_samps:].copy() if len(buffer) > tail_samps else buffer.copy()
-                    )
-                    prompt = self.last_final_text
-                    rms = np.sqrt(np.mean(partial_buffer**2))
-                    if rms > self.audio.silence_threshold:
-                        if self._asr_busy:
-                            self._pending_partial = (
-                                partial_buffer.copy(),
-                                chunk_id,
-                                prompt,
-                                t_cap,
-                            )
-                        else:
-                            t_cap = time.perf_counter()
-                            if config.log_latency:
-                                pdur = len(partial_buffer) / self.audio.sample_rate
-                                print(
-                                    f"[AUDIO] chunk={chunk_id} partial | {pdur:.2f}s | → ASR"
-                                )
-                            transcribe_executor.submit(
-                                self._process_partial_chunk,
-                                partial_buffer,
-                                chunk_id,
-                                prompt,
-                                t_cap,
-                            )
-                    last_update_time = now
-
-        except Exception as e:
-            print(f"[Pipeline] Error in loop: {e}")
-        finally:
-            transcribe_executor.shutdown(wait=False)
-
-    def _latency_meta(self, chunk_id, kind, t_captured):
-        return {
+    def _handle_asr_job(self, job):
+        kind = job["kind"]
+        chunk_id = job["chunk_id"]
+        t_captured = job["t_captured"]
+        meta = {
             "chunk_id": chunk_id,
             "kind": kind,
             "t_captured": t_captured,
             "sample_rate": self.audio.sample_rate,
         }
+        text = self.transcriber.transcribe(
+            job["audio"], prompt=job.get("prompt"), latency_meta=meta
+        )
+        if text:
+            if kind == "final" and len(text.split()) > 2:
+                self.last_final_text = text
+            self._emit_text(chunk_id, text, t_captured, kind)
 
     def _emit_text(self, chunk_id, text, t_captured, kind):
         t_emit = time.perf_counter()
@@ -217,46 +130,76 @@ class Pipeline(QObject):
             e2e_ms = (t_emit - t_captured) * 1000
             print(
                 f"[LATENCY] {kind} chunk={chunk_id} | E2E={e2e_ms:.0f}ms "
-                f"(âm thanh → chữ trên màn hình)"
+                f"(âm thanh → màn hình)"
             )
 
-    def _process_partial_chunk(self, audio_data, chunk_id, prompt="", t_captured=None):
-        self._asr_busy = True
-        try:
-            meta = self._latency_meta(chunk_id, "partial", t_captured)
-            text = self.transcriber.transcribe(audio_data, prompt=prompt, latency_meta=meta)
-            if text:
-                self._emit_text(chunk_id, text, t_captured, "partial")
-        except Exception as e:
-            print(f"[Partial {chunk_id}] Error: {e}")
-        finally:
-            self._asr_busy = False
-            self._flush_pending_partial()
+    def processing_loop(self):
+        import numpy as np
 
-    def _flush_pending_partial(self):
-        executor = getattr(self, "_transcribe_executor", None)
-        if not executor:
-            return
-        pending = self._pending_partial
-        if pending and not self._asr_busy:
-            self._pending_partial = None
-            buf, cid, prompt, t_cap = pending
-            executor.submit(self._process_partial_chunk, buf, cid, prompt, t_cap)
+        print("[Pipeline] processing loop started.")
+        chunk_id = 1
+        last_update_time = time.time()
+        sr = self.audio.sample_rate
+        audio_gen = self.audio.generator()
 
-    def _process_final_chunk(self, audio_data, chunk_id, prompt="", t_captured=None):
-        self._asr_busy = True
         try:
-            meta = self._latency_meta(chunk_id, "final", t_captured)
-            text = self.transcriber.transcribe(audio_data, prompt=prompt, latency_meta=meta)
-            if text:
-                if len(text.split()) > 2:
-                    self.last_final_text = text
-                self._emit_text(chunk_id, text, t_captured, "final")
+            for audio_chunk in audio_gen:
+                if not self.running:
+                    break
+                self._chunk_buffers.append(audio_chunk)
+                buffer = np.concatenate(self._chunk_buffers)
+                now = time.time()
+                buffer_duration = len(buffer) / sr
+
+                is_silence = False
+                if buffer_duration > config.silence_duration:
+                    tail = buffer[-int(sr * config.silence_duration):]
+                    if np.sqrt(np.mean(tail**2)) < self.audio.silence_threshold:
+                        is_silence = True
+
+                standard_cut = is_silence and buffer_duration >= self.standard_cut_duration
+                soft_limit_cut = False
+                if buffer_duration >= self.soft_cut_at_duration:
+                    st = int(sr * 0.3)
+                    if len(buffer) > st:
+                        if np.sqrt(np.mean(buffer[-st:]**2)) < self.audio.silence_threshold:
+                            soft_limit_cut = True
+
+                hard_limit_cut = buffer_duration > self.audio.max_phrase_duration
+                should_finalize = standard_cut or soft_limit_cut or hard_limit_cut
+
+                if should_finalize and buffer_duration >= self.min_phrase_duration:
+                    if np.sqrt(np.mean(buffer**2)) >= self.audio.silence_threshold:
+                        t_cap = time.perf_counter()
+                        if config.log_latency:
+                            print(
+                                f"[AUDIO] chunk={chunk_id} final | {buffer_duration:.2f}s → ASR"
+                            )
+                        self._submit_asr(
+                            "final", buffer.copy(), chunk_id, self.last_final_text, t_cap
+                        )
+                    self._chunk_buffers = []
+                    chunk_id += 1
+                    last_update_time = now
+
+                elif (
+                    self.partial_updates
+                    and now - last_update_time > self.update_interval
+                    and buffer_duration >= self.min_phrase_duration
+                ):
+                    tail_samps = int(sr * self.partial_window_seconds)
+                    partial = buffer[-tail_samps:].copy() if len(buffer) > tail_samps else buffer.copy()
+                    if np.sqrt(np.mean(partial**2)) > self.audio.silence_threshold:
+                        t_cap = time.perf_counter()
+                        self._submit_asr(
+                            "partial", partial, chunk_id, self.last_final_text, t_cap
+                        )
+                    last_update_time = now
+
         except Exception as e:
-            print(f"[Final {chunk_id}] Error: {e}")
-        finally:
-            self._asr_busy = False
-            self._flush_pending_partial()
+            print(f"[Pipeline] Error in loop: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 _pipeline = None

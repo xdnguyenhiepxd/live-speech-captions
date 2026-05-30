@@ -28,8 +28,10 @@ Với `log_latency = true` (mặc định trên bản Intel):
 ```
 
 - **asr**: thời gian model chạy  
-- **queue**: chờ thread ASR  
+- **queue**: thời gian chờ trước khi ASR chạy (mục tiêu **&lt;50ms** sau bản queue 1 slot)  
 - **E2E**: từ lúc cắt âm → hiện chữ  
+
+Nếu **queue &gt; 200ms**: thường do nhiều job cũ — app giờ **chỉ giữ 1 job**, job mới thay job cũ (`[ASR] Bỏ job …`).
 
 ## Model khuyến nghị
 

@@ -42,6 +42,9 @@ class Config:
         self.vad_filter = self._get("transcription", "vad_filter", "false").lower() == "true"
         self.max_transcribe_seconds = self._getfloat("transcription", "max_transcribe_seconds", 4.0)
         self.log_latency = self._get("transcription", "log_latency", "true").lower() == "true"
+        self.use_context_prompt = self._get(
+            "transcription", "use_context_prompt", "false"
+        ).lower() == "true"
         
         # Audio settings
         self.sample_rate = self._getint("audio", "sample_rate", 16000)
