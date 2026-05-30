@@ -64,8 +64,13 @@ ERROR: No matching distribution found for moonshine-voice
 
 ## Chạy thử (khi pip cài được)
 
+Bắt **âm thanh máy** (YouTube/Zoom) qua **BlackHole** — giống app chính, không dùng mic:
+
 ```bash
+# Cần Multi-Output: Loa + BlackHole, đầu ra hệ thống = Multi-Output
 python test_moonshine_streaming.py --arch small_streaming
+python test_moonshine_streaming.py --list-devices
+python test_moonshine_streaming.py --device 3   # index BlackHole
 ```
 
 ---
