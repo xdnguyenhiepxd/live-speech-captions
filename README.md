@@ -41,11 +41,18 @@ source_language = en
 
 ## Âm thanh hệ thống (YouTube, Zoom)
 
-1. Cài [BlackHole](https://existential.audio/blackhole/) (macOS).  
-2. **Đầu ra** macOS = **Multi-Output Device** (loa + BlackHole).  
-3. Trong app: thiết bị vào = **BlackHole 2ch**.
+Để **nghe video YouTube / Zoom qua loa** mà app vẫn hiện chữ, cần **BlackHole** + **Multi-Output** trên macOS.
 
-Chỉ dùng mic laptop thì chọn mic trong tab **Âm thanh**.
+**Hướng dẫn chi tiết từng bước (có ảnh):** [BLACKHOLE_SETUP.md](./BLACKHOLE_SETUP.md)
+
+Tóm tắt:
+
+1. `brew install blackhole-2ch` (hoặc tải từ [existential.audio/blackhole](https://existential.audio/blackhole/))  
+2. **Audio MIDI Setup** → tạo **Multi-Output** (tick **Loa** + **BlackHole 2ch**)  
+3. **Cài đặt hệ thống → Âm thanh → Đầu ra** = Multi-Output  
+4. Trong app: tab **Âm thanh** → thiết bị vào = **BlackHole 2ch** (hoặc `device_index = auto`)
+
+Chỉ dùng **mic laptop** thì không cần BlackHole — chọn mic trong tab **Âm thanh**.
 
 ## Windows
 

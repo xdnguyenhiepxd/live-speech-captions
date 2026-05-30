@@ -22,6 +22,8 @@ cp config/mac/macbook-air-intel.ini.example config.ini
 | `[display]` | `reader_font_size` | Cỡ chữ overlay |
 | `[audio]` | `device_index` | `auto` = tự tìm BlackHole |
 
+YouTube / tiếng hệ thống: cài BlackHole + Multi-Output — **[BLACKHOLE_SETUP.md](../BLACKHOLE_SETUP.md)**.
+
 ## Cài thư viện
 
 ```bash

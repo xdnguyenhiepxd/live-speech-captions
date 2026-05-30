@@ -34,7 +34,8 @@ if ! command -v ffmpeg &> /dev/null; then
     echo "  [CẢNH BÁO] Thiếu ffmpeg — brew install ffmpeg hoặc https://evermeet.cx/ffmpeg/"
 fi
 if [ ! -d "/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver" ]; then
-    echo "  [GỢI Ý] BlackHole (bắt tiếng hệ thống): https://existential.audio/blackhole/"
+    echo "  [GỢI Ý] BlackHole: brew install blackhole-2ch"
+    echo "           Hướng dẫn: BLACKHOLE_SETUP.md"
 fi
 
 echo ""

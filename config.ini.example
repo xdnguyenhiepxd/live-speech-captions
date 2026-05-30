@@ -1,5 +1,6 @@
 # cp config/mac/macbook-air.ini.example config.ini   (Apple Silicon)
 # cp config/mac/macbook-air-intel.ini.example config.ini   (Intel)
+# YouTube / âm hệ thống: xem BLACKHOLE_SETUP.md
 
 [display]
 reader_font_size = 32
