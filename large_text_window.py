@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 
-from overlay_window import ResizeHandle
 import time
 import os
 
@@ -228,3 +227,32 @@ class LargeTextOverlayWindow(QWidget):
         if self._last_chunk_id is not None:
             self._commit_chunk(self._last_chunk_id)
         super().closeEvent(event)
+
+
+class ResizeHandle(QLabel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.setText("◢")
+        self.setStyleSheet("color: rgba(255, 255, 255, 100); font-size: 16px;")
+        self.setFixedSize(20, 20)
+        self.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
+        self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        self.startPos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.startPos = event.globalPosition().toPoint()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self.startPos:
+            delta = event.globalPosition().toPoint() - self.startPos
+            new_width = max(self.parent_window.minimumWidth(), self.parent_window.width() + delta.x())
+            new_height = max(self.parent_window.minimumHeight(), self.parent_window.height() + delta.y())
+            self.parent_window.resize(new_width, new_height)
+            self.startPos = event.globalPosition().toPoint()
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self.startPos = None

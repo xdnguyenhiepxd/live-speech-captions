@@ -90,7 +90,7 @@ class Dashboard(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Phụ đề thời gian thực — Bảng điều khiển")
+        self.setWindowTitle("Nhận giọng — Bảng điều khiển")
         self.setMinimumSize(600, 500)
         self.setStyleSheet(STYLESHEET)
         
@@ -101,7 +101,7 @@ class Dashboard(QWidget):
         self.setLayout(self.layout)
         
         # Header
-        header = QLabel("🎙️ Phụ đề thời gian thực")
+        header = QLabel("🎙️ Nhận giọng → chữ")
         header.setStyleSheet("font-size: 24px; font-weight: bold; color: #89b4fa;")
         self.layout.addWidget(header)
         
@@ -113,7 +113,6 @@ class Dashboard(QWidget):
         self.init_audio_tab()
         self.init_device_manager_tab()
         self.init_transcription_tab()
-        self.init_translation_tab()
         
         # Footer Actions
         footer = QHBoxLayout()
@@ -136,33 +135,21 @@ class Dashboard(QWidget):
         self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
         layout.addWidget(self.status_label)
         
-        btn_layout = QHBoxLayout()
-        
-        self.start_btn = QPushButton("▶ Phụ đề + dịch")
-        self.start_btn.setFixedSize(220, 56)
-        self.start_btn.setStyleSheet("font-size: 15px; background-color: #89b4fa; border-radius: 10px;")
-        self.start_btn.clicked.connect(lambda: self.on_start(translate=True))
+        self.start_btn = QPushButton("▶ Bắt đầu")
+        self.start_btn.setFixedSize(260, 56)
+        self.start_btn.setStyleSheet("font-size: 16px; background-color: #a6e3a1; color: #1e1e2e; border-radius: 10px;")
+        self.start_btn.clicked.connect(self.on_start)
 
-        self.reader_btn = QPushButton("🔤 Chữ to — chỉ nhận giọng")
-        self.reader_btn.setFixedSize(220, 56)
-        self.reader_btn.setStyleSheet("font-size: 15px; background-color: #a6e3a1; color: #1e1e2e; border-radius: 10px;")
-        self.reader_btn.clicked.connect(lambda: self.on_start(translate=False))
-        
         self.stop_btn = QPushButton("⏹ Dừng")
-        self.stop_btn.setFixedSize(220, 56)
+        self.stop_btn.setFixedSize(260, 56)
         self.stop_btn.setStyleSheet("font-size: 16px; background-color: #f38ba8; border-radius: 10px;")
         self.stop_btn.clicked.connect(self.on_stop)
         self.stop_btn.hide()
-        
-        layout.addLayout(btn_layout)
+
         layout.addWidget(self.start_btn)
-        layout.addWidget(self.reader_btn)
         layout.addWidget(self.stop_btn)
-        
-        info = QLabel(
-            "• <b>Phụ đề + dịch</b>: nhận giọng + dịch API (cần key)\n"
-            "• <b>Chữ to</b>: chỉ chuyển giọng → chữ lớn, không cần API"
-        )
+
+        info = QLabel("Tiếng Anh (hoặc ngôn ngữ trong config) → chữ lớn trên màn hình. <b>Không cần API.</b>")
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setStyleSheet("color: #6c7086; font-style: italic;")
         layout.addWidget(info)
@@ -505,120 +492,34 @@ class Dashboard(QWidget):
             self.device_status.setText(f"❌ Lỗi: {str(e)}")
             self.device_status.setStyleSheet("color: #f38ba8;")
 
-    def refresh_model_list(self):
-        """Fetch available models from the API and populate the model dropdown"""
-        try:
-            from openai import OpenAI
-            import httpx
-            
-            api_key = self.api_key.text() or "dummy-key-for-local"
-            base_url = self.base_url.text() or None
-            
-            # Update button state
-            self.refresh_models_btn.setEnabled(False)
-            self.refresh_models_btn.setText("...")
-            
-            # Create client with SSL verification disabled
-            http_client = httpx.Client(verify=False)
-            client = OpenAI(api_key=api_key, base_url=base_url, http_client=http_client)
-            
-            # Fetch models
-            models_response = client.models.list()
-            model_ids = [model.id for model in models_response.data]
-            
-            # Update combo box
-            current_model = self.model.currentText()
-            self.model.clear()
-            
-            if model_ids:
-                self.model.addItems(sorted(model_ids))
-                # Try to restore previous selection
-                index = self.model.findText(current_model)
-                if index >= 0:
-                    self.model.setCurrentIndex(index)
-                    
-                # Show success in status label if we're on the home tab
-                if hasattr(self, 'status_label'):
-                    self.status_label.setText(f"✅ Đã tải {len(model_ids)} model")
-                    self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
-            else:
-                self.model.addItem(current_model)
-                if hasattr(self, 'status_label'):
-                    self.status_label.setText("⚠️ Không tìm thấy model")
-                    self.status_label.setStyleSheet("font-size: 18px; color: #fab387;")
-            
-        except Exception as e:
-            # Restore original model on error
-            if not self.model.currentText():
-                self.model.addItem(config.model)
-            
-            error_msg = str(e)
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"❌ Lỗi tải model: {error_msg[:50]}")
-                self.status_label.setStyleSheet("font-size: 18px; color: #f38ba8;")
-            print(f"[Dashboard] Model refresh error: {error_msg}")
-        
-        finally:
-            # Restore button state
-            self.refresh_models_btn.setEnabled(True)
-            self.refresh_models_btn.setText("🔄")
-
     def init_transcription_tab(self):
         tab = QWidget()
         layout = QFormLayout()
         
         # ASR Backend Selection
         self.asr_backend = QComboBox()
-        self.asr_backend.addItems(["whisper", "mlx", "funasr"])
-        self.asr_backend.setCurrentText(config.asr_backend)
-        self.asr_backend.setToolTip(
-            "whisper: CPU/CUDA (faster-whisper)\n"
-            "mlx: GPU Apple Silicon (mlx-whisper)\n"
-            "funasr: ASR Alibaba (tốt cho tiếng Trung)"
+        self.asr_backend.addItems(["whisper", "mlx"])
+        self.asr_backend.setCurrentText(
+            config.asr_backend if config.asr_backend in ("whisper", "mlx") else "whisper"
         )
-        self.asr_backend.currentTextChanged.connect(self._on_backend_changed)
+        self.asr_backend.setToolTip("mlx: Apple Silicon | whisper: Intel / Windows / CPU")
         layout.addRow("Engine ASR:", self.asr_backend)
-        
-        # Whisper Model
+
         self.whisper_model = QComboBox()
-        self.whisper_model.addItems(["tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large-v3", "turbo"])
+        self.whisper_model.addItems(
+            ["tiny.en", "base.en", "small.en", "medium.en", "tiny", "base", "small", "medium", "large-v3"]
+        )
         self.whisper_model.setCurrentText(config.whisper_model)
         layout.addRow("Model Whisper:", self.whisper_model)
-        
-        # FunASR Model
-        self.funasr_model = QComboBox()
-        self.funasr_model.setEditable(True)
-        self.funasr_model.addItems([
-            "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
-            "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
-            "iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404-online",
-            "iic/speech_UniASR_asr_2pass-vi-16k-common-vocab1001-pytorch-online",
-            "iic/speech_UniASR_asr_2pass-en-16k-common-vocab1080-tensorflow1-online",
-            "iic/SenseVoiceSmall",
-            "FunAudioLLM/SenseVoiceSmall",
-            "FunAudioLLM/Fun-ASR-Nano-2512",
-            "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
-        ])
-        self.funasr_model.setCurrentText(config.funasr_model)
-        self.funasr_model.setToolTip(
-            "Chinese (Offline): iic/speech_paraformer-large...\n"
-            "Chinese (Streaming): iic/speech_paraformer_asr_nat...online\n"
-            "English (Streaming): iic/speech_UniASR_asr_2pass-en...\n"
-            "Multi-language: iic/SenseVoiceSmall\n"
-            "Latest 31-lang model: FunAudioLLM/Fun-ASR-Nano-2512"
-        )
-        layout.addRow("Model FunASR:", self.funasr_model)
         
         self.device_type = QComboBox()
         self.device_type.addItems(["cpu", "cuda", "mps", "auto"])
         self.device_type.setCurrentText(config.whisper_device)
-        self.device_type.currentTextChanged.connect(self._on_device_changed)
         layout.addRow("Thiết bị tính toán:", self.device_type)
-        
+
         self.compute_type = QComboBox()
         self.compute_type.addItems(["int8", "float16", "float32"])
         self.compute_type.setCurrentText(config.whisper_compute_type)
-        self.compute_type.currentTextChanged.connect(self._on_quantization_changed)
         layout.addRow("Lượng tử hóa:", self.compute_type)
         
         # Source Language Configuration
@@ -629,123 +530,8 @@ class Dashboard(QWidget):
         self.source_language.setCurrentText(source_lang if source_lang else "en")
         layout.addRow("Ngôn ngữ nguồn:", self.source_language)
         
-        # Update UI based on initial backend
-        self._on_backend_changed(config.asr_backend)
-        
         tab.setLayout(layout)
         self.tabs.addTab(tab, "📝 Nhận giọng")
-    
-    def _on_backend_changed(self, backend):
-        """Show/hide model selectors based on backend and warn about device compatibility"""
-        is_whisper_or_mlx = backend in ["whisper", "mlx"]
-        is_funasr = backend == "funasr"
-        
-        # Enable/disable appropriate widgets
-        self.whisper_model.setEnabled(is_whisper_or_mlx)
-        self.funasr_model.setEnabled(is_funasr)
-        
-        # Visual feedback - dim disabled widgets
-        if is_whisper_or_mlx:
-            self.whisper_model.setStyleSheet("")
-            self.funasr_model.setStyleSheet("color: #6c7086;")
-        else:
-            self.whisper_model.setStyleSheet("color: #6c7086;")
-            self.funasr_model.setStyleSheet("")
-        
-        # Check MPS + FunASR quantization compatibility
-        if is_funasr:
-            self._check_funasr_mps_compatibility()
-    
-    def _check_funasr_mps_compatibility(self):
-        """Check if MPS device is used with FunASR and enforce float32"""
-        current_device = self.device_type.currentText()
-        current_quantization = self.compute_type.currentText()
-        
-        if current_device == "mps" and current_quantization != "float32":
-            self._show_mps_float32_warning()
-            # Auto-switch to float32
-            float32_index = self.compute_type.findText("float32")
-            if float32_index >= 0:
-                self.compute_type.setCurrentIndex(float32_index)
-    
-    def _show_mps_float32_warning(self):
-        """Show warning about MPS requiring float32 with FunASR"""
-        from PyQt6.QtWidgets import QMessageBox
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setWindowTitle("Tương thích lượng tử hóa")
-        msg.setText("FunASR trên MPS cần dùng float32")
-        msg.setInformativeText(
-            "MPS (Metal) của Apple không hỗ trợ float64.\n\n"
-            "Khi dùng FunASR với thiết bị MPS, lượng tử hóa phải là float32.\n\n"
-            "Đã tự động chuyển sang float32."
-        )
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg.exec()
-    
-    def _on_device_changed(self, device):
-        """Check device compatibility when user changes device selection"""
-        # Check MPS + FunASR quantization compatibility
-        if self.asr_backend.currentText() == "funasr":
-            self._check_funasr_mps_compatibility()
-    
-    def _on_quantization_changed(self, quantization):
-        """Check quantization compatibility when user changes quantization"""
-        # Check MPS + FunASR quantization compatibility
-        if self.asr_backend.currentText() == "funasr":
-            self._check_funasr_mps_compatibility()
-
-    def init_translation_tab(self):
-        tab = QWidget()
-        layout = QFormLayout()
-        
-        self.api_key = QLineEdit(config.api_key)
-        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key.setPlaceholderText("sk-...")
-        layout.addRow("Khóa API:", self.api_key)
-        
-        self.base_url = QLineEdit(config.api_base_url or "")
-        self.base_url.setPlaceholderText("https://api.openai.com/v1")
-        layout.addRow("URL gốc:", self.base_url)
-        
-        # Model selection with refresh button
-        model_layout = QHBoxLayout()
-        self.model = QComboBox()
-        self.model.setEditable(True)
-        self.model.addItem(config.model)
-        model_layout.addWidget(self.model)
-        
-        self.refresh_models_btn = QPushButton("🔄")
-        self.refresh_models_btn.setFixedWidth(40)
-        self.refresh_models_btn.setToolTip("Tải lại danh sách model từ API")
-        self.refresh_models_btn.clicked.connect(self.refresh_model_list)
-        model_layout.addWidget(self.refresh_models_btn)
-        
-        layout.addRow("Model dịch:", model_layout)
-        
-        self.target_lang = QComboBox()
-        for label, value in [
-            ("Tiếng Việt", "Vietnamese"),
-            ("Tiếng Anh", "English"),
-            ("Tiếng Trung", "Chinese"),
-            ("Tiếng Nhật", "Japanese"),
-            ("Tiếng Pháp", "French"),
-            ("Tiếng Tây Ban Nha", "Spanish"),
-            ("Tiếng Đức", "German"),
-            ("Tiếng Hàn", "Korean"),
-        ]:
-            self.target_lang.addItem(label, value)
-        self.target_lang.setEditable(True)
-        idx = self.target_lang.findData(config.target_lang)
-        if idx >= 0:
-            self.target_lang.setCurrentIndex(idx)
-        else:
-            self.target_lang.addItem(config.target_lang, config.target_lang)
-            self.target_lang.setCurrentText(config.target_lang)
-        layout.addRow("Ngôn ngữ đích:", self.target_lang)
-        
-        tab.setLayout(layout)
-        self.tabs.addTab(tab, "🈵 Dịch")
 
     def populate_devices(self):
         self.device_combo.clear()
@@ -771,16 +557,15 @@ class Dashboard(QWidget):
         import os
         
         # Update config object logic would go here, 
-        # For now, we write directly to config.ini similarly to settings_window.py
+        # Ghi trực tiếp config.ini
         
         cp = configparser.ConfigParser()
         config_path = os.path.join(os.path.dirname(__file__), "config.ini")
         cp.read(config_path)
         
         if not cp.has_section("audio"): cp.add_section("audio")
-        if not cp.has_section("api"): cp.add_section("api")
-        if not cp.has_section("translation"): cp.add_section("translation")
         if not cp.has_section("transcription"): cp.add_section("transcription")
+        if not cp.has_section("display"): cp.add_section("display")
         
         # Audio
         idx = self.device_combo.currentData()
@@ -792,34 +577,22 @@ class Dashboard(QWidget):
         # Transcription
         cp.set("transcription", "backend", self.asr_backend.currentText())
         cp.set("transcription", "whisper_model", self.whisper_model.currentText())
-        cp.set("transcription", "funasr_model", self.funasr_model.currentText())
         cp.set("transcription", "device", self.device_type.currentText())
         cp.set("transcription", "compute_type", self.compute_type.currentText())
         cp.set("transcription", "source_language", self.source_language.currentText())
-        
-        # Translation
-        cp.set("api", "api_key", self.api_key.text())
-        cp.set("api", "base_url", self.base_url.text())
-        cp.set("translation", "model", self.model.currentText())
-        target = self.target_lang.currentData()
-        cp.set("translation", "target_lang", target if target else self.target_lang.currentText())
         
         with open(config_path, 'w') as f:
             cp.write(f)
             
         self.status_label.setText("Đã lưu! Khởi động lại nếu cần.")
 
-    def on_start(self, translate=True):
-        self._session_translate = translate
-        label = "phụ đề + dịch" if translate else "chữ to (nhận giọng)"
-        self.status_label.setText(f"Đang khởi tạo {label}…")
+    def on_start(self):
+        self.status_label.setText("Đang tải model Whisper…")
         self.status_label.setStyleSheet("font-size: 18px; color: #fab387;")
         self.start_btn.setEnabled(False)
-        self.reader_btn.setEnabled(False)
         self.start_btn.setText("Đang tải...")
-        self.reader_btn.setText("Đang tải...")
 
-        self.startup_worker = StartupWorker(enable_translation=translate)
+        self.startup_worker = StartupWorker()
         self.startup_worker.finished.connect(self.on_pipeline_ready)
         self.startup_worker.start()
 
@@ -832,22 +605,13 @@ class Dashboard(QWidget):
             return
 
         self.pipeline = pipeline
-        translate = getattr(self, "_session_translate", True)
 
-        if translate:
-            from main import OverlayWindow
-            self.overlay_window = OverlayWindow(
-                display_duration=config.display_duration,
-                window_width=config.window_width,
-            )
-        else:
-            from large_text_window import LargeTextOverlayWindow
-            self.overlay_window = LargeTextOverlayWindow(
-                window_width=config.reader_window_width,
-                font_size=config.reader_font_size,
-                keep_lines=config.reader_keep_lines,
-            )
-
+        from large_text_window import LargeTextOverlayWindow
+        self.overlay_window = LargeTextOverlayWindow(
+            window_width=config.reader_window_width,
+            font_size=config.reader_font_size,
+            keep_lines=config.reader_keep_lines,
+        )
         self.overlay_window.show()
         self.pipeline.signals.update_text.connect(self.overlay_window.update_text)
         if hasattr(self.overlay_window, "stop_requested"):
@@ -855,20 +619,16 @@ class Dashboard(QWidget):
 
         self.pipeline.start()
 
-        mode = "Phụ đề + dịch" if translate else "Chữ to"
-        self.status_label.setText(f"Đang chạy: {mode}")
+        self.status_label.setText("Đang chạy — nhận giọng")
         self.status_label.setStyleSheet("font-size: 18px; color: #a6e3a1;")
 
         self.start_btn.hide()
-        self.reader_btn.hide()
         self.stop_btn.show()
         self.showMinimized()
 
     def _reset_start_buttons(self):
         self.start_btn.setEnabled(True)
-        self.reader_btn.setEnabled(True)
-        self.start_btn.setText("▶ Phụ đề + dịch")
-        self.reader_btn.setText("🔤 Chữ to — chỉ nhận giọng")
+        self.start_btn.setText("▶ Bắt đầu")
 
     def on_stop(self):
         if hasattr(self, "pipeline") and self.pipeline:
@@ -883,21 +643,16 @@ class Dashboard(QWidget):
         self.stop_btn.hide()
         self._reset_start_buttons()
         self.start_btn.show()
-        self.reader_btn.show()
         self.showNormal()
 
 
 class StartupWorker(QThread):
     finished = pyqtSignal(object, object)
 
-    def __init__(self, enable_translation=True):
-        super().__init__()
-        self.enable_translation = enable_translation
-
     def run(self):
         try:
             from main import Pipeline
-            pipeline = Pipeline(enable_translation=self.enable_translation)
+            pipeline = Pipeline()
             self.finished.emit(None, pipeline)
         except Exception as e:
             print(f"Startup Error: {e}")

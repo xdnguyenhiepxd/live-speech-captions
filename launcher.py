@@ -55,7 +55,7 @@ class DependencyInstaller(QThread):
 class LauncherWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Phụ đề thời gian thực — Khởi động")
+        self.setWindowTitle("Nhận giọng — Khởi động")
         self.setFixedSize(400, 200)
         
         central_widget = QWidget()

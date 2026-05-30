@@ -1,5 +1,5 @@
-# Apple Silicon (M1/M2/M3/M4) — tiếng Anh → chữ lớn
-#   cp config/mac/macbook-air.ini.example config.ini
+# Intel Mac (2018–2020), macOS 11+ — Whisper CPU, không MLX
+#   cp config/mac/macbook-air-intel.ini.example config.ini
 
 [display]
 reader_font_size = 32
@@ -7,10 +7,10 @@ reader_window_width = 920
 reader_keep_lines = 50
 
 [transcription]
-backend = mlx
-whisper_model = small.en
-device = auto
-compute_type = float16
+backend = whisper
+whisper_model = base.en
+device = cpu
+compute_type = int8
 source_language = en
 transcription_workers = 1
 
@@ -19,14 +19,11 @@ device_index = auto
 sample_rate = 16000
 silence_threshold = 0.005
 silence_duration = 0.45
-chunk_duration = 0.1
 max_phrase_duration = 6
 streaming_mode = true
-streaming_interval = 3
 streaming_step_size = 0.2
-streaming_overlap = 0.2
 reader_partial_updates = true
-reader_update_interval = 0.85
+reader_update_interval = 1.0
 partial_window_seconds = 2.5
 min_phrase_duration = 0.8
 standard_cut_duration = 1.0
