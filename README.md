@@ -9,7 +9,7 @@ git clone <URL-repository>/live-speech-captions.git
 cd live-speech-captions
 chmod +x install_mac.sh start_mac.sh
 ./install_mac.sh
-cp config/mac/macbook-air.ini.example config.ini   # Intel: macbook-air-intel.ini.example
+cp config/mac/macbook-air-intel.ini.example config.ini 
 ./start_mac.sh
 ```
 
